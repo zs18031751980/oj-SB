@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>com.xauat.oj</groupId><artifactId>oj-backend</artifactId><version>0.1.0-SNAPSHOT</version></parent>
+    <artifactId>oj-worker</artifactId>
+    <dependencies>
+        <dependency><groupId>com.xauat.oj</groupId><artifactId>oj-core</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.xauat.oj</groupId><artifactId>oj-infrastructure</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>
+        <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>
+    </dependencies>
+</project>

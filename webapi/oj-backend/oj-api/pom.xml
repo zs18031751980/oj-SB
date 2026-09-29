@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>com.xauat.oj</groupId><artifactId>oj-backend</artifactId><version>0.1.0-SNAPSHOT</version></parent>
+    <artifactId>oj-api</artifactId>
+    <dependencies>
+        <dependency><groupId>com.xauat.oj</groupId><artifactId>oj-common</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.xauat.oj</groupId><artifactId>oj-core</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.xauat.oj</groupId><artifactId>oj-infrastructure</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-validation</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    </dependencies>
+    <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId><configuration><mainClass>com.xauat.oj.api.OjApiApplication</mainClass></configuration><executions><execution><goals><goal>repackage</goal></goals></execution></executions></plugin></plugins></build>
+</project>

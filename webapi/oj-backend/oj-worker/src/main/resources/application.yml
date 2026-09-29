@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: oj-worker
+  datasource:
+    url: ${OJ_DB_URL:jdbc:postgresql://localhost:5432/oj}
+    username: ${OJ_DB_USERNAME:oj}
+    password: ${OJ_DB_PASSWORD:oj}
+  data:
+    redis:
+      host: ${OJ_REDIS_HOST:localhost}
+      port: ${OJ_REDIS_PORT:6379}
+      password: ${OJ_REDIS_PASSWORD:}
+oj:
+  judge:
+    enabled: ${OJ_JUDGE_ENABLED:false}
+    url: ${OJ_JUDGE0_URL:http://localhost:2358}
+    language-ids: ${OJ_JUDGE_LANGUAGE_IDS:cpp=54,python=71,java=62,go=60,javascript=63}
+  worker:
+    poll-delay-ms: ${OJ_WORKER_POLL_DELAY_MS:1000}
+    recovery-delay-ms: ${OJ_WORKER_RECOVERY_DELAY_MS:30000}
