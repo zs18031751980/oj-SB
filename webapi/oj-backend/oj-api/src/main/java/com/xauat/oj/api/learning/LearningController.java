@@ -57,14 +57,14 @@ public class LearningController {
     @PostMapping("/learn-history")
     public Map<String, Object> record(@RequestHeader(value = "Authorization", required = false) String authorization, @RequestBody HistoryRequest request) {
         var item = history.save(LearnBrowsingHistory.of(currentUser.require(authorization), request.resourceId()));
-        return Map.of("id", item.getId(), "resource_id", item.getResourceId());
+        return Map.of("id", item.getId(), "resource_id", item.getResourceId(), "success", true);
     }
 
     @DeleteMapping("/learn-history")
     @Transactional
     public Map<String, Object> clear(@RequestHeader(value = "Authorization", required = false) String authorization) {
         history.deleteByUserId(currentUser.require(authorization).getId());
-        return Map.of("cleared", true);
+        return Map.of("cleared", true, "success", true);
     }
 
     public record HistoryRequest(@NotBlank String resourceId) {}

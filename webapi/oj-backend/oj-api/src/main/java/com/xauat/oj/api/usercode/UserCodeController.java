@@ -32,7 +32,7 @@ public class UserCodeController {
                                  @RequestParam(defaultValue = "cpp") String language) {
         var user = currentUser.require(authorization);
         return codes.findByUserIdAndProblemIdAndLanguage(user.getId(), problemId, language).<ResponseEntity<?>>map(item -> ResponseEntity.ok(Map.of("problem_id", item.getProblemId(), "language", item.getLanguage(), "code", item.getCode())))
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseGet(() -> ResponseEntity.ok(java.util.Collections.singletonMap("code", null)));
     }
 
     public record CodeRequest(@NotNull Integer problemId, @NotBlank String language, @NotBlank String code) {}
