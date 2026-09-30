@@ -1,0 +1,7 @@
+
+The following files have been resolved:
+   org.springframework:spring-context:jar:6.2.11:compile[36m -- module spring.context[0;1m [auto][m
+   io.jsonwebtoken:jjwt-api:jar:0.12.6:compile[36m -- module jjwt.api[0;1;33m (auto)[m
+   io.jsonwebtoken:jjwt-impl:jar:0.12.6:runtime[36m -- module jjwt.impl[0;1;33m (auto)[m
+   io.jsonwebtoken:jjwt-jackson:jar:0.12.6:runtime[36m -- module jjwt.jackson[0;1;33m (auto)[m
+
