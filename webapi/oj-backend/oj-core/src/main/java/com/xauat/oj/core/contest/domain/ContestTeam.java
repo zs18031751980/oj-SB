@@ -14,5 +14,6 @@ public class ContestTeam extends BaseEntity {
     public static ContestTeam create(Contest contest, User captain, String name) { ContestTeam item = new ContestTeam(); item.contest = contest; item.captain = captain; item.name = name; return item; }
     public Integer getContestId() { return contest.getId(); }
     public String getName() { return name; }
+    public Integer getCaptainId() { return captain == null ? null : captain.getId(); }
     public Integer getId() { return super.getId(); }
 }

@@ -55,6 +55,11 @@ public class User extends BaseEntity {
     public String getName() { return name; }
     public String getAvatarUrl() { return avatarUrl; }
     public String getRole() { return role; }
+    public String getProviderRole() { return providerRole; }
+    public String getLocalRole() { return localRole; }
+    public void setRole(String role) { this.role = role; }
+    public void setProviderRole(String providerRole) { this.providerRole = providerRole; }
+    public void setUsername(String username) { this.username = username; }
     public boolean isActive() { return active; }
     public String getPasswordHash() { return passwordHash; }
     public String getProvider() { return provider; }
@@ -66,7 +71,10 @@ public class User extends BaseEntity {
         if (bio != null) this.bio = bio;
         if (themePreference != null) this.themePreference = themePreference;
     }
+    public String getBio() { return bio; }
+    public void setEmail(String email) { this.email = email; }
     public void markLogin() { this.lastLogin = LocalDateTime.now(); }
+    public void updatePasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public void setActive(boolean active) { this.active = active; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
 }

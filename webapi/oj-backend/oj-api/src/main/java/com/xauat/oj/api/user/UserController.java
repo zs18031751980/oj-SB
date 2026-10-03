@@ -40,20 +40,31 @@ public class UserController {
     }
 
     @PatchMapping
-    public Map<String, Object> update(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                      @Valid @RequestBody ProfileRequest request) {
+    public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                    @RequestBody ProfileRequest request) {
         User user = currentUser.require(authorization);
+        if (request.email() != null && !request.email().isBlank()) {
+            String email = request.email().trim();
+            var existing = users.findByEmail(email);
+            if (existing.isPresent() && !existing.get().getId().equals(user.getId())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "该邮箱已被其他用户使用"));
+            }
+            user.setEmail(email);
+        }
         user.updateProfile(request.name(), request.bio(), request.themePreference());
         users.save(user);
-        return info(user);
+        Map<String, Object> body = new java.util.LinkedHashMap<>(info(user));
+        body.put("success", true);
+        body.put("user_info", info(user));
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/stats")
     public Map<String, Object> stats(@RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUser.require(authorization);
         int solved = stats.findById(user.getId()).map(com.xauat.oj.core.ranking.domain.UserJudgeStats::getSolvedCount).orElse(0);
-        int submissionCount = submissions.findByUserIdOrderByIdDesc(user.getId()).size();
-        int favoriteCount = favorites.findByUserIdOrderByIdDesc(user.getId()).size();
+        int submissionCount = submissions.findByUser_IdOrderByIdDesc(user.getId()).size();
+        int favoriteCount = favorites.findByUser_IdOrderByIdDesc(user.getId()).size();
         return Map.of("solved", solved, "submissions", submissionCount, "favorites", favoriteCount);
     }
 
@@ -78,7 +89,11 @@ public class UserController {
                 "is_active", user.isActive(), "theme_preference", user.getThemePreference());
     }
 
-    public record ProfileRequest(@Size(max = 100) String name, @Size(max = 500) String bio,
-                                 @Size(max = 10) String themePreference) {}
-    public record AvatarRequest(@jakarta.validation.constraints.NotBlank @Size(max = 500) String avatarUrl) {}
+    public record ProfileRequest(@Size(max = 100) String name, @jakarta.validation.constraints.Email @Size(max = 100) String email,
+                                 @Size(max = 500) String bio,
+                                 @com.fasterxml.jackson.annotation.JsonProperty("theme_preference")
+                                 @com.fasterxml.jackson.annotation.JsonAlias("themePreference") @Size(max = 10) String themePreference) {}
+    public record AvatarRequest(@com.fasterxml.jackson.annotation.JsonProperty("avatar_url")
+                                @com.fasterxml.jackson.annotation.JsonAlias("avatarUrl")
+                                @jakarta.validation.constraints.NotBlank @Size(max = 500) String avatarUrl) {}
 }

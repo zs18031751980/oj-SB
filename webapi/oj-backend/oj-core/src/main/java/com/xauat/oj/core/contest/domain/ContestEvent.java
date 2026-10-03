@@ -16,5 +16,6 @@ public class ContestEvent extends BaseEntity {
     public Integer getContestId() { return contest.getId(); }
     public String getKind() { return kind; }
     public String getAudience() { return audience; }
+    public Integer getRecipientId() { return recipientId; }
     public String getPayload() { return payload; }
 }

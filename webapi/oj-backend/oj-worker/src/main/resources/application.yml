@@ -1,6 +1,8 @@
 spring:
   application:
     name: oj-worker
+  flyway:
+    enabled: false
   datasource:
     url: ${OJ_DB_URL:jdbc:postgresql://localhost:5432/oj}
     username: ${OJ_DB_USERNAME:oj}
@@ -11,10 +13,18 @@ spring:
       port: ${OJ_REDIS_PORT:6379}
       password: ${OJ_REDIS_PASSWORD:}
 oj:
+  auth:
+    jwt-secret: ${OJ_JWT_SECRET:change-this-secret-in-production-change-this-secret-in-production}
   judge:
     enabled: ${OJ_JUDGE_ENABLED:false}
+    executor: ${OJ_JUDGE_EXECUTOR:judge0}
     url: ${OJ_JUDGE0_URL:http://localhost:2358}
     language-ids: ${OJ_JUDGE_LANGUAGE_IDS:cpp=54,python=71,java=62,go=60,javascript=63}
+    sandbox:
+      image: ${JUDGE_SANDBOX_IMAGE:letcoding-sandbox:local}
+      backend: ${JUDGE_BACKEND:docker}
   worker:
+    pool: ${OJ_WORKER_POOL:all}
+    heartbeat-ms: ${OJ_WORKER_HEARTBEAT_MS:10000}
     poll-delay-ms: ${OJ_WORKER_POLL_DELAY_MS:1000}
     recovery-delay-ms: ${OJ_WORKER_RECOVERY_DELAY_MS:30000}

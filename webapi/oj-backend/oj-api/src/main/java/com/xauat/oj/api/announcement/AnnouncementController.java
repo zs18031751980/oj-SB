@@ -38,14 +38,14 @@ public class AnnouncementController {
     }
 
     @PostMapping({"", "/"})
-    public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false) String authorization, @RequestBody AnnouncementRequest request) {
+    public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false) String authorization, @jakarta.validation.Valid @RequestBody AnnouncementRequest request) {
         var user = currentUser.require(authorization); if (!"manager".equals(user.getRole())) return ResponseEntity.status(403).body(Map.of("error", "权限不足"));
         Announcement item = announcements.save(Announcement.create(request.title(), request.content(), request.category(), request.permission(), String.valueOf(user.getId()), request.published()));
         return ResponseEntity.status(201).body(view(item));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id, @RequestBody AnnouncementRequest request) {
+    public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id, @jakarta.validation.Valid @RequestBody AnnouncementRequest request) {
         var user = currentUser.require(authorization); if (!"manager".equals(user.getRole())) return ResponseEntity.status(403).body(Map.of("error", "权限不足"));
         var item = announcements.findById(id).orElse(null); if (item == null) return ResponseEntity.notFound().build();
         item.update(request.title(), request.content(), request.category(), request.permission(), request.published());
@@ -70,5 +70,8 @@ public class AnnouncementController {
     }
 
     public record AnnouncementRequest(@JsonProperty("is_published") @JsonAlias("published") boolean published,
-                                      String title, String content, String category, String permission) {}
+                                      @jakarta.validation.constraints.Size(max = 200) String title,
+                                      @jakarta.validation.constraints.Size(max = 131072) String content,
+                                      @jakarta.validation.constraints.Size(max = 50) String category,
+                                      @jakarta.validation.constraints.Size(max = 20) String permission) {}
 }

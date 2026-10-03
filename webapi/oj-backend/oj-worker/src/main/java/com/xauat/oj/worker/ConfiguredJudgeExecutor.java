@@ -1,30 +1,36 @@
 package com.xauat.oj.worker;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xauat.oj.core.contest.repository.ContestSubmissionRepository;
-import com.xauat.oj.core.submission.repository.SubmissionRepository;
-import com.xauat.oj.core.problem.repository.TestcaseRepository;
-import com.xauat.oj.core.contest.repository.JudgementRepository;
+import com.xauat.oj.core.contest.domain.Contest;
+import com.xauat.oj.core.contest.domain.ContestProblem;
 import com.xauat.oj.core.contest.domain.Judgement;
-import com.xauat.oj.core.contest.repository.ContestTestcaseRepository;
 import com.xauat.oj.core.contest.repository.ContestProblemRepository;
-import org.springframework.beans.factory.annotation.Value;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.HashMap;
+import com.xauat.oj.core.contest.repository.ContestRepository;
+import com.xauat.oj.core.contest.repository.ContestSubmissionRepository;
+import com.xauat.oj.core.contest.repository.ContestTestcaseRepository;
+import com.xauat.oj.core.contest.repository.JudgementRepository;
+import com.xauat.oj.core.problem.repository.TestcaseRepository;
+import com.xauat.oj.core.submission.repository.SubmissionRepository;
+import com.xauat.oj.infrastructure.judge.Checker;
+import com.xauat.oj.infrastructure.judge.ExecutionClient;
+import com.xauat.oj.infrastructure.judge.Judge0Client;
+import com.xauat.oj.infrastructure.judge.JudgeVerdict;
+import com.xauat.oj.infrastructure.judge.OutputChecker;
+import com.xauat.oj.infrastructure.queue.JudgeQueue;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * 生产环境通过 oj.judge.enabled=true 启用 Judge0 适配器；未启用时由 DisabledJudgeExecutor 保留任务。
  */
 @Component
-@ConditionalOnProperty(name = "oj.judge.enabled", havingValue = "true")
+@ConditionalOnExpression("('${oj.judge.executor:judge0}' == 'judge0' or '${oj.judge.executor:judge0}' == 'local') and ${oj.judge.enabled:false}")
 public class ConfiguredJudgeExecutor implements JudgeExecutor {
     private final SubmissionRepository submissions;
     private final ContestSubmissionRepository contestSubmissions;
@@ -32,51 +38,140 @@ public class ConfiguredJudgeExecutor implements JudgeExecutor {
     private final JudgementRepository judgements;
     private final ContestTestcaseRepository contestTestcases;
     private final ContestProblemRepository contestProblems;
+    private final ContestRepository contests;
+    private final ExecutionClient judge0;
+    private final Checker checker;
+    private final JudgeQueue queue;
+    private final JudgeStageRecorder stageRecorder;
     private final ObjectMapper mapper;
-    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-    private final String judgeUrl;
-    private final Map<String, Integer> languageIds = new HashMap<>();
 
-    public ConfiguredJudgeExecutor(SubmissionRepository submissions, ContestSubmissionRepository contestSubmissions, TestcaseRepository testcases, JudgementRepository judgements, ContestTestcaseRepository contestTestcases, ContestProblemRepository contestProblems, ObjectMapper mapper,
-                                   @Value("${oj.judge.url}") String judgeUrl,
-                                   @Value("${oj.judge.language-ids:cpp=54,python=71,java=62,go=60,javascript=63}") String languageConfig) {
-        this.submissions = submissions; this.contestSubmissions = contestSubmissions; this.testcases = testcases; this.judgements = judgements; this.contestTestcases = contestTestcases; this.contestProblems = contestProblems; this.mapper = mapper; this.judgeUrl = judgeUrl;
-        for (String item : languageConfig.split(",")) { String[] parts = item.split("=", 2); if (parts.length == 2) languageIds.put(parts[0], Integer.valueOf(parts[1])); }
+    public ConfiguredJudgeExecutor(SubmissionRepository submissions, ContestSubmissionRepository contestSubmissions,
+                                   TestcaseRepository testcases, JudgementRepository judgements,
+                                   ContestTestcaseRepository contestTestcases, ContestProblemRepository contestProblems,
+                                   ContestRepository contests, ExecutionClient judge0, Checker checker, JudgeQueue queue,
+                                   JudgeStageRecorder stageRecorder, ObjectMapper mapper) {
+        this.submissions = submissions; this.contestSubmissions = contestSubmissions; this.testcases = testcases;
+        this.judgements = judgements; this.contestTestcases = contestTestcases; this.contestProblems = contestProblems;
+        this.contests = contests; this.judge0 = judge0; this.checker = checker; this.queue = queue;
+        this.stageRecorder = stageRecorder; this.mapper = mapper;
     }
 
     @Override
     public void execute(String jobId) {
         var regular = submissions.findByJobId(jobId);
-        if (regular.isPresent()) { var item = regular.get(); item.markRunning(); submissions.save(item); var cases = testcases.findByProblemIdOrderBySortOrderAscIdAsc(item.getProblemId()); JudgeResult result = cases.isEmpty() ? judge(item.getCode(), item.getLanguage(), "", "") : judgeCases(item.getCode(), item.getLanguage(), cases); item.recordResult(result.verdict(), result.timeMs(), result.memoryKb(), result.details(), "Accepted".equals(result.verdict()) ? null : 0); submissions.save(item); return; }
-        var contest = contestSubmissions.findByJobId(jobId).orElseThrow(() -> new IllegalArgumentException("未知判题任务: " + jobId));
-        contest.markRunning("judge0-worker"); contestSubmissions.save(contest); var cases = contestTestcases.findByContestProblemIdOrderBySortOrderAscIdAsc(contest.getContestProblemId()); JudgeResult result = cases.isEmpty() ? judge(contest.getCode(), contest.getLanguage(), "", "") : judgeContestCases(contest.getCode(), contest.getLanguage(), cases); int passed = result.passed(); int total = cases.isEmpty() ? 1 : cases.size(); int updated = contestSubmissions.updateResultIfCurrentAttempt(contest.getId(), contest.getAttemptId(), result.verdict(), result.timeMs(), result.memoryKb() == null ? null : result.memoryKb().longValue(), passed, total, result.details()); if (updated == 1) { String digest = contestProblems.findById(contest.getContestProblemId()).map(p -> p.getPackageDigest()).orElse(null); judgements.save(Judgement.of(contest, contest.getAttemptId(), result.verdict(), result.details(), digest, null)); }
+        if (regular.isPresent()) { judgeRegular(regular.get()); return; }
+        var contest = contestSubmissions.findByJobId(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("未知判题任务: " + jobId));
+        judgeContest(contest);
     }
 
-    private JudgeResult judgeCases(String sourceCode, String language, java.util.List<com.xauat.oj.core.problem.domain.Testcase> cases) {
-        java.util.List<String> details = new java.util.ArrayList<>(); JudgeResult last = new JudgeResult("Accepted", 0, 0, "{}", 0);
-        for (var testcase : cases) { last = judge(sourceCode, language, testcase.getInputData(), testcase.getOutputData()); details.add(last.details()); if (!"Accepted".equals(last.verdict())) return new JudgeResult(last.verdict(), last.timeMs(), last.memoryKb(), json(details), details.size()-1); }
-        return new JudgeResult("Accepted", last.timeMs(), last.memoryKb(), json(details), cases.size());
+    private void judgeRegular(com.xauat.oj.core.submission.domain.Submission submission) {
+        submission.markRunning();
+        submissions.save(submission);
+        String slotSubject = "user:" + submission.getUserId();
+        String slotToken = "job:" + submission.getJobId();
+        if (!queue.acquireExecutionSlot(slotSubject, slotToken, 3, 60)) {
+            throw new IllegalStateException("执行并发槽已满: " + slotSubject);
+        }
+        var cases = testcases.findByProblemIdOrderBySortOrderAscIdAsc(submission.getProblemId());
+        List<Map<String, Object>> outcomes = new ArrayList<>();
+        int passed = 0; int totalTime = 0; int maxMemory = 0; String verdict = JudgeVerdict.ACCEPTED; Integer failIndex = null;
+        for (int i = 0; i < cases.size(); i++) {
+            var testcase = cases.get(i);
+            Judge0Client.Result result = judge0.run(submission.getCode(), submission.getLanguage(), testcase.getInputData(), 60);
+            String status = JudgeVerdict.fromStatus(result.statusId(), result.description());
+            boolean ok = false;
+            if (JudgeVerdict.ACCEPTED.equals(status)) {
+                ok = OutputChecker.matches("exact", result.stdout(), testcase.getOutputData());
+                if (!ok) status = JudgeVerdict.WRONG_ANSWER;
+            }
+            outcomes.add(caseOutcome(i, status, ok, result, testcase.getInputData(), testcase.getOutputData()));
+            totalTime += result.timeMs() == null ? 0 : result.timeMs();
+            maxMemory = Math.max(maxMemory, result.memoryKb() == null ? 0 : result.memoryKb());
+            if (ok) passed++;
+            else { failIndex = i; verdict = status; break; }
+        }
+        if (cases.isEmpty()) verdict = JudgeVerdict.ACCEPTED;
+        submission.recordResult(verdict, totalTime, maxMemory, json(outcomes), failIndex);
+        submissions.save(submission);
+        if (submission.getCreatedAt() != null) {
+            stageRecorder.observe("all", "total", java.time.Duration.between(submission.getCreatedAt(), java.time.LocalDateTime.now()).toMillis() / 1000.0);
+        }
+        queue.releaseExecutionSlot(slotSubject, slotToken);
     }
 
-    private JudgeResult judgeContestCases(String sourceCode, String language, java.util.List<com.xauat.oj.core.contest.domain.ContestTestcase> cases) { java.util.List<String> details = new java.util.ArrayList<>(); JudgeResult last = new JudgeResult("Accepted", 0, 0, "[]", 0); String checker = contestProblems.findById(cases.get(0).getContestProblemId()).map(p -> checkerName(p.getCheckerConfig())).orElse("text"); for (var testcase : cases) { last = judge(sourceCode, language, testcase.getInputData(), testcase.getExpectedOutput(), checker); details.add(last.details()); if (!"Accepted".equals(last.verdict())) return new JudgeResult(last.verdict(), last.timeMs(), last.memoryKb(), json(details), details.size()-1); } return new JudgeResult("Accepted", last.timeMs(), last.memoryKb(), json(details), cases.size()); }
-
-    private JudgeResult judge(String sourceCode, String language, String stdin, String expectedOutput) { return judge(sourceCode, language, stdin, expectedOutput, "exact"); }
-    private JudgeResult judge(String sourceCode, String language, String stdin, String expectedOutput, String checker) {
-        Integer languageId = languageIds.get(language.toLowerCase()); if (languageId == null) throw new IllegalArgumentException("不支持的语言: " + language);
-        try {
-            if ("custom".equals(checker)) return new JudgeResult("Checker Unavailable", 0, 0, "{\"error\":\"custom checker requires sandbox configuration\"}", 0);
-            Map<String,Object> request = new HashMap<>(); request.put("source_code", sourceCode); request.put("language_id", languageId); request.put("stdin", stdin); if (("exact".equals(checker) || "text".equals(checker)) && expectedOutput != null && !expectedOutput.isBlank()) request.put("expected_output", expectedOutput);
-            String body = mapper.writeValueAsString(request);
-            HttpRequest create = HttpRequest.newBuilder(URI.create(judgeUrl + "/submissions?base64_encoded=false&wait=false")).timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
-            JsonNode created = mapper.readTree(client.send(create, HttpResponse.BodyHandlers.ofString()).body()); String token = created.path("token").asText();
-            if (token.isBlank()) throw new IllegalStateException("Judge0 未返回 token");
-            for (int i = 0; i < 60; i++) { Thread.sleep(500); HttpRequest poll = HttpRequest.newBuilder(URI.create(judgeUrl + "/submissions/" + token + "?base64_encoded=false")).timeout(Duration.ofSeconds(10)).GET().build(); JsonNode result = mapper.readTree(client.send(poll, HttpResponse.BodyHandlers.ofString()).body()); int status = result.path("status").path("id").asInt(0); if (status >= 3) { String verdict = status == 3 ? "Accepted" : result.path("status").path("description").asText("Judgement Failed"); if ("Accepted".equals(verdict) && !("exact".equals(checker) || "text".equals(checker)) && !matches(result.path("stdout").asText(""), expectedOutput, checker)) verdict = "Wrong Answer"; return new JudgeResult(verdict, result.path("time").asInt(0), result.path("memory").asInt(0), mapper.writeValueAsString(result), "Accepted".equals(verdict) ? 1 : 0); } }
-            return new JudgeResult("Time Limit Exceeded", 0, 0, "{}", 0);
-        } catch (InterruptedException exception) { Thread.currentThread().interrupt(); throw new IllegalStateException("判题被中断", exception); }
-        catch (Exception exception) { throw new IllegalStateException("Judge0 调用失败", exception); }
+    private void judgeContest(com.xauat.oj.core.contest.domain.ContestSubmission submission) {
+        submission.markRunning("judge0-worker");
+        contestSubmissions.save(submission);
+        var cases = contestTestcases.findByContestProblem_IdOrderBySortOrderAscIdAsc(submission.getContestProblemId());
+        ContestProblem problem = contestProblems.findById(submission.getContestProblemId()).orElse(null);
+        String checkerConfig = problem == null ? "{}" : problem.getCheckerConfig();
+        Contest contest = problem == null ? null : contests.findById(problem.getContestId()).orElse(null);
+        boolean oi = contest != null && "OI".equalsIgnoreCase(contest.getContestType());
+        String slotSubject = "user:" + submission.getUserId();
+        String slotToken = "job:" + submission.getJobId();
+        if (!queue.acquireExecutionSlot(slotSubject, slotToken, contest != null ? Math.max(1, contest.getActiveSubmissionLimit()) : 3, 60)) {
+            throw new IllegalStateException("执行并发槽已满: " + slotSubject);
+        }
+        java.time.LocalDateTime startedAt = java.time.LocalDateTime.now();
+        List<Map<String, Object>> outcomes = new ArrayList<>();
+        int passed = 0; Integer totalTime = 0; Integer maxMemory = 0; String verdict = JudgeVerdict.ACCEPTED; String firstFailure = null;
+        int outputSize = 0; Integer lastExitCode = null;
+        for (int i = 0; i < cases.size(); i++) {
+            var testcase = cases.get(i);
+            Judge0Client.Result result = judge0.run(submission.getCode(), submission.getLanguage(), testcase.getInputData(), 60);
+            outputSize += result.stdout() == null ? 0 : result.stdout().length();
+            lastExitCode = result.exitCode();
+            String status = JudgeVerdict.fromStatus(result.statusId(), result.description());
+            boolean ok = false;
+            if (JudgeVerdict.ACCEPTED.equals(status)) {
+                try { ok = checker.check(checkerConfig, result.stdout(), testcase.getExpectedOutput(), testcase.getInputData()); }
+                catch (Checker.CheckerUnavailableException exception) { status = JudgeVerdict.SYSTEM_ERROR; }
+                if (JudgeVerdict.ACCEPTED.equals(status) && !ok) status = JudgeVerdict.WRONG_ANSWER;
+            }
+            outcomes.add(caseOutcome(i, status, ok, result, testcase.getInputData(), testcase.getExpectedOutput()));
+            totalTime += result.timeMs() == null ? 0 : result.timeMs();
+            maxMemory = Math.max(maxMemory, result.memoryKb() == null ? 0 : result.memoryKb());
+            if (ok) passed++;
+            else {
+                if (firstFailure == null) firstFailure = status;
+                if (!oi) { verdict = status; break; }
+            }
+        }
+        if (cases.isEmpty()) verdict = JudgeVerdict.ACCEPTED;
+        else if (!JudgeVerdict.ACCEPTED.equals(firstFailure)) verdict = oi ? (passed > 0 ? JudgeVerdict.PARTIAL : firstFailure) : firstFailure;
+        int total = cases.isEmpty() ? 1 : cases.size();
+        int updated = contestSubmissions.updateResultIfCurrentAttempt(submission.getId(), submission.getAttemptId(),
+                verdict, totalTime, maxMemory == null ? null : maxMemory.longValue(), passed, total, json(outcomes));
+        if (updated == 1) {
+            java.time.LocalDateTime finishedAt = java.time.LocalDateTime.now();
+            contestSubmissions.updateMetricsIfCurrentAttempt(submission.getId(), submission.getAttemptId(), startedAt, finishedAt,
+                    startedAt, finishedAt, outputSize, lastExitCode, null, problem == null ? null : problem.getPackageDigest());
+            if (problem != null) judgements.save(Judgement.of(submission, submission.getAttemptId(), verdict, json(outcomes), problem.getPackageDigest(), null));
+            if (contest != null) { contest.requestScoreboardRefresh(); contests.save(contest); }
+        }
+        if (submission.getReceivedAt() != null) {
+            stageRecorder.observe("all", "total", java.time.Duration.between(submission.getReceivedAt(), java.time.LocalDateTime.now()).toMillis() / 1000.0);
+        }
+        queue.releaseExecutionSlot(slotSubject, slotToken);
     }
-    private String json(Object value) { try { return mapper.writeValueAsString(value); } catch (Exception exception) { return "[]"; } }
-    private String checkerName(String config) { try { String name = mapper.readTree(config == null ? "{}" : config).path("checker").asText("text").toLowerCase(); return switch (name) { case "tokens", "float", "custom", "exact", "text" -> name; default -> "text"; }; } catch (Exception exception) { return "text"; } }
-    private boolean matches(String actual, String expected, String checker) { if (expected == null) return false; if ("tokens".equals(checker)) return java.util.Arrays.equals(actual.trim().split("\\s+"), expected.trim().split("\\s+")); if ("float".equals(checker)) { try { String[] a = actual.trim().split("\\s+"); String[] e = expected.trim().split("\\s+"); if (a.length != e.length) return false; for (int i = 0; i < a.length; i++) if (Math.abs(Double.parseDouble(a[i]) - Double.parseDouble(e[i])) > 1e-6) return false; return true; } catch (Exception exception) { return false; } } return actual.trim().equals(expected.trim()); }
-    private record JudgeResult(String verdict, Integer timeMs, Integer memoryKb, String details, int passed) {}
+
+    private Map<String, Object> caseOutcome(int index, String status, boolean passed, Judge0Client.Result result, String input, String expected) {
+        Map<String, Object> outcome = new LinkedHashMap<>();
+        outcome.put("testCaseIndex", index);
+        outcome.put("passed", passed);
+        outcome.put("status", status);
+        outcome.put("time_used", result.timeMs());
+        outcome.put("memory_used", result.memoryKb());
+        outcome.put("stdout", result.stdout());
+        outcome.put("stderr", JudgeVerdict.COMPILATION_ERROR.equals(status) && !result.compileOutput().isBlank() ? result.compileOutput() : result.stderr());
+        outcome.put("input", input);
+        outcome.put("expected", expected);
+        return outcome;
+    }
+
+    private String json(Object value) {
+        try { return mapper.writeValueAsString(value); }
+        catch (Exception exception) { return "[]"; }
+    }
 }

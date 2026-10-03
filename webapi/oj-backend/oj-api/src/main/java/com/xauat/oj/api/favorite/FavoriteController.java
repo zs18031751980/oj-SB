@@ -20,7 +20,7 @@ public class FavoriteController {
 
     @GetMapping({"", "/"})
     public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        List<Map<String, Object>> data = favorites.findByUserIdOrderByIdDesc(currentUser.require(authorization).getId()).stream()
+        List<Map<String, Object>> data = favorites.findByUser_IdOrderByIdDesc(currentUser.require(authorization).getId()).stream()
                 .map(favorite -> favoriteView(favorite, problems.findById(favorite.getProblemId()).orElse(null))).toList();
         return Map.of("data", data, "total", data.size());
     }
@@ -29,19 +29,19 @@ public class FavoriteController {
     @PostMapping("/{problemId}")
     public Map<String, Object> add(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer problemId) {
         var user = currentUser.require(authorization);
-        if (!favorites.existsByUserIdAndProblemId(user.getId(), problemId)) favorites.save(Favorite.of(user, problemId));
+        if (!favorites.existsByUser_IdAndProblemId(user.getId(), problemId)) favorites.save(Favorite.of(user, problemId));
         return Map.of("problem_id", problemId, "favorited", true);
     }
 
     @DeleteMapping("/{problemId}")
     @Transactional
     public Map<String, Object> remove(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer problemId) {
-        favorites.deleteByUserIdAndProblemId(currentUser.require(authorization).getId(), problemId);
+        favorites.deleteByUser_IdAndProblemId(currentUser.require(authorization).getId(), problemId);
         return Map.of("problem_id", problemId, "favorited", false);
     }
 
     @GetMapping("/{problemId}/status")
     public Map<String, Object> status(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer problemId) {
-        return Map.of("problem_id", problemId, "favorited", favorites.existsByUserIdAndProblemId(currentUser.require(authorization).getId(), problemId));
+        return Map.of("problem_id", problemId, "favorited", favorites.existsByUser_IdAndProblemId(currentUser.require(authorization).getId(), problemId));
     }
 }

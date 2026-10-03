@@ -5,5 +5,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface DiscussionReplyRepository extends JpaRepository<DiscussionReply, Integer> {
-    List<DiscussionReply> findByDiscussionIdOrderByCreatedAtAscIdAsc(Integer discussionId);
+    List<DiscussionReply> findByDiscussion_IdOrderByCreatedAtAscIdAsc(Integer discussionId);
 }

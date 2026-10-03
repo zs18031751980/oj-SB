@@ -16,6 +16,9 @@ public class RejudgeBatch extends BaseEntity {
     public static RejudgeBatch create(Contest contest, User actor, String reason) { RejudgeBatch item = new RejudgeBatch(); item.contest = contest; item.actor = actor; item.reason = reason; return item; }
     public Integer getContestId() { return contest.getId(); }
     public String getState() { return state; }
-    public void review(Integer userId, boolean approve) { reviewedBy = userId; state = approve ? "APPROVED" : "REJECTED"; }
-    public boolean approved() { return "APPROVED".equals(state); }
+    public String getReason() { return reason; }
+    public Integer getActorId() { return actor == null ? null : actor.getId(); }
+    public boolean isPending() { return "PENDING".equals(state); }
+    public void apply(Integer reviewerId) { reviewedBy = reviewerId; state = "APPLIED"; }
+    public void cancel(Integer reviewerId) { reviewedBy = reviewerId; state = "CANCELLED"; }
 }

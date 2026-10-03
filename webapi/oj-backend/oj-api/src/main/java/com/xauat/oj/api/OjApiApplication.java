@@ -12,6 +12,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class OjApiApplication {
     public static void main(String[] args) {
+        // 学习资源 id 含 `/`，前端用 encodeURIComponent 编码为 %2F；Tomcat 默认拒绝编码斜杠。
+        System.setProperty("org.apache.tomcat.util.buf.UDecoder.ALLOW_ENCODED_SLASH", "true");
         SpringApplication.run(OjApiApplication.class, args);
     }
 }

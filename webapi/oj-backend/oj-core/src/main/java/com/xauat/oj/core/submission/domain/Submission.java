@@ -38,4 +38,5 @@ public class Submission extends BaseEntity {
     public Integer getTimeUsed() { return timeUsed; }
     public Integer getMemoryUsed() { return memoryUsed; }
     public String getTestcaseResults() { return testcaseResults; }
+    public Integer getFailTestcaseIndex() { return failTestcaseIndex; }
 }

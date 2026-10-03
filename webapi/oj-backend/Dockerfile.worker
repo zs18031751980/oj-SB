@@ -1,0 +1,22 @@
+# Judge Worker 镜像：构建 oj-worker 并安装 Docker CLI 以调度沙箱镜像。
+# 运行需挂载 /var/run/docker.sock（仅 Worker 需要，API 不挂载）。
+FROM maven:3.9.9-eclipse-temurin-25 AS build
+WORKDIR /src
+COPY pom.xml ./
+COPY oj-common/pom.xml oj-common/
+COPY oj-core/pom.xml oj-core/
+COPY oj-infrastructure/pom.xml oj-infrastructure/
+COPY oj-api/pom.xml oj-api/
+COPY oj-worker/pom.xml oj-worker/
+RUN mvn -B -q -DskipTests dependency:go-offline
+COPY . .
+RUN mvn -B -q -DskipTests -pl oj-worker -am package
+
+FROM eclipse-temurin:25-jre
+RUN apt-get update && apt-get install -y --no-install-recommends docker.io ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+ARG SERVICE=oj-worker
+ENV SERVICE=${SERVICE} JAVA_OPTS=""
+WORKDIR /app
+COPY --from=build /src/oj-worker/target/oj-worker-0.1.0-SNAPSHOT.jar /app/oj-worker.jar
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/${SERVICE}.jar"]

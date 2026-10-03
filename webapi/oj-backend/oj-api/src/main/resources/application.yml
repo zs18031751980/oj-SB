@@ -27,13 +27,39 @@ server:
   port: ${OJ_API_PORT:6173}
   forward-headers-strategy: framework
 oj:
+  cors:
+    origins: ${OJ_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}
+  metrics:
+    token: ${METRICS_TOKEN:}
+  readiness:
+    require-worker: ${OJ_REQUIRE_WORKER:false}
+    worker-fresh-seconds: ${OJ_WORKER_FRESH_SECONDS:45}
   rate-limit:
     per-minute: ${OJ_RATE_LIMIT_PER_MINUTE:60}
     window-seconds: ${OJ_RATE_LIMIT_WINDOW_SECONDS:60}
+    login-account-per-minute: ${OJ_RATE_LIMIT_LOGIN_ACCOUNT_PER_MINUTE:20}
+  oauth:
+    pkce: ${OJ_OAUTH_PKCE:false}
+  mfa:
+    require: ${JURY_REQUIRE_MFA:false}
+    totp-secrets: ${JURY_TOTP_SECRETS:}
+  rejudge:
+    dual-review-min: ${CONTEST_DUAL_REVIEW_MIN:0}
+  retention:
+    dead-letter-days: ${OJ_RETENTION_DEAD_LETTER_DAYS:30}
+    browsing-days: ${OJ_RETENTION_BROWSING_DAYS:180}
+    outbox-days: ${OJ_RETENTION_OUTBOX_DAYS:7}
+    cron: ${OJ_RETENTION_CRON:0 30 3 * * *}
   auth:
     jwt-secret: ${OJ_JWT_SECRET:change-this-secret-in-production-change-this-secret-in-production}
     access-ttl-seconds: ${OJ_ACCESS_TTL_SECONDS:900}
-    refresh-ttl-seconds: ${OJ_REFRESH_TTL_SECONDS:2592000}
+    refresh-ttl-seconds: ${OJ_REFRESH_TTL_SECONDS:604800}
+    issuer: ${OJ_JWT_ISSUER:letcoding}
+    audience: ${OJ_JWT_AUDIENCE:letcoding-api}
+    cookie-secure: ${OJ_COOKIE_SECURE:false}
+    frontend-url: ${OJ_FRONTEND_URL:http://localhost:5173}
+  judge:
+    local-enabled: ${OJ_ALLOW_LOCAL_JUDGE:false}
   judge0:
     url: ${OJ_JUDGE0_URL:http://localhost:2358}
     enabled: ${OJ_JUDGE0_ENABLED:false}
@@ -41,7 +67,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:

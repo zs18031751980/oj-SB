@@ -1,39 +1,48 @@
 package com.xauat.oj.api.auth;
 
 import com.xauat.oj.common.auth.JwtService;
+import com.xauat.oj.core.auth.domain.AuthSession;
+import com.xauat.oj.core.auth.repository.AuthSessionRepository;
 import com.xauat.oj.core.user.domain.User;
 import com.xauat.oj.core.user.repository.UserRepository;
+import io.jsonwebtoken.Claims;
 import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
 
 @Component
 public class CurrentUser {
     private final JwtService jwtService;
     private final UserRepository users;
+    private final AuthSessionRepository sessions;
 
-    public CurrentUser(JwtService jwtService, UserRepository users) {
+    public CurrentUser(JwtService jwtService, UserRepository users, AuthSessionRepository sessions) {
         this.jwtService = jwtService;
         this.users = users;
+        this.sessions = sessions;
     }
 
     public User require(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) throw new com.xauat.oj.common.exception.OjException("UNAUTHORIZED", "请先登录");
-        try {
-            Integer id = Integer.valueOf(jwtService.parse(authorization.substring(7)).getSubject());
-            return users.findById(id).filter(User::isActive)
-                    .orElseThrow(() -> new com.xauat.oj.common.exception.OjException("UNAUTHORIZED", "用户不存在或已停用"));
-        } catch (com.xauat.oj.common.exception.OjException exception) {
-            throw exception;
-        } catch (RuntimeException exception) {
-            throw new com.xauat.oj.common.exception.OjException("UNAUTHORIZED", "令牌无效或已过期");
-        }
+        User user = optional(authorization);
+        if (user == null) throw new com.xauat.oj.common.exception.OjException("UNAUTHORIZED", "令牌无效或已过期");
+        return user;
     }
 
-    /** 可选身份：令牌缺失/无效/用户停用都会返回 null，用于公开接口计算 is_liked 之类的个性化字段。 */
+    /** 访问令牌必须同时通过签名校验与服务端会话校验（撤销/过期/账号状态）。 */
     public User optional(String authorization) {
         if (authorization == null || !authorization.startsWith("Bearer ")) return null;
         try {
-            Integer id = Integer.valueOf(jwtService.parse(authorization.substring(7)).getSubject());
-            return users.findById(id).filter(User::isActive).orElse(null);
+            Claims claims = jwtService.parseAccess(authorization.substring(7));
+            String sid = claims.get("sid", String.class);
+            if (sid == null) return null;
+            AuthSession session = sessions.findById(sid).orElse(null);
+            if (session == null || session.isRevoked() || session.getExpiresAt() == null
+                    || !session.getExpiresAt().isAfter(LocalDateTime.now()) || session.getUserId() == null) {
+                return null;
+            }
+            Integer userId = Integer.valueOf(claims.getSubject());
+            if (!userId.equals(session.getUserId())) return null;
+            return users.findById(userId).filter(User::isActive).orElse(null);
         } catch (RuntimeException exception) {
             return null;
         }

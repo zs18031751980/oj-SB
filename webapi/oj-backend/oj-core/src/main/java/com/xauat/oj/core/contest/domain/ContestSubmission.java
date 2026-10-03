@@ -31,6 +31,16 @@ public class ContestSubmission extends BaseEntity {
     private Long memory;
     @Column(name = "testcase_results", columnDefinition = "text") private String testcaseResults;
     @Column(name = "error_message", columnDefinition = "text") private String errorMessage;
+    @Column(name = "compile_started_at") private LocalDateTime compileStartedAt;
+    @Column(name = "compile_finished_at") private LocalDateTime compileFinishedAt;
+    @Column(name = "execution_started_at") private LocalDateTime executionStartedAt;
+    @Column(name = "execution_finished_at") private LocalDateTime executionFinishedAt;
+    @Column(name = "checked_at") private LocalDateTime checkedAt;
+    @Column(name = "output_size") private Integer outputSize;
+    @Column(name = "exit_code") private Integer exitCode;
+    @Column(name = "signal") private Integer signal;
+    @Column(name = "package_digest", length = 64) private String packageDigest;
+    @Column(name = "request_digest", length = 64) private String requestDigest;
     @Column(name = "idempotency_key", length = 128) private String idempotencyKey;
     @Column(name = "received_at") private LocalDateTime receivedAt;
     @Column(name = "contest_eligible") private boolean contestEligible = true;
@@ -60,11 +70,52 @@ public class ContestSubmission extends BaseEntity {
     public int getTotal() { return total; }
     public int getScore() { return score; }
     public LocalDateTime getSubmittedAt() { return submittedAt; }
+    public LocalDateTime getReceivedAt() { return receivedAt == null ? submittedAt : receivedAt; }
     public LocalDateTime getFinishedAt() { return finishedAt; }
     public Integer getRejudgeOfId() { return rejudgeOf == null ? null : rejudgeOf.getId(); }
     public Integer getRejudgeBaseAttempt() { return rejudgeBaseAttempt; }
+    public String getTestcaseResults() { return testcaseResults; }
+    public Integer getCpuTime() { return cpuTime; }
+    public Long getMemory() { return memory; }
+    public Integer getWallTime() { return wallTime; }
+    public String getErrorMessage() { return errorMessage; }
+    public boolean isContestEligible() { return contestEligible; }
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public void asPractice() { this.contestEligible = false; }
+    public LocalDateTime getCompileStartedAt() { return compileStartedAt; }
+    public LocalDateTime getCompileFinishedAt() { return compileFinishedAt; }
+    public LocalDateTime getExecutionStartedAt() { return executionStartedAt; }
+    public LocalDateTime getExecutionFinishedAt() { return executionFinishedAt; }
+    public LocalDateTime getCheckedAt() { return checkedAt; }
+    public Integer getOutputSize() { return outputSize; }
+    public Integer getExitCode() { return exitCode; }
+    public Integer getSignal() { return signal; }
+    public String getPackageDigest() { return packageDigest; }
+    public String getRequestDigest() { return requestDigest; }
+    public void recordMetrics(LocalDateTime compileStart, LocalDateTime compileEnd, LocalDateTime executionStart,
+                              LocalDateTime executionEnd, Integer outputSize, Integer exitCode, Integer signal, String packageDigest) {
+        this.compileStartedAt = compileStart; this.compileFinishedAt = compileEnd;
+        this.executionStartedAt = executionStart; this.executionFinishedAt = executionEnd;
+        this.checkedAt = executionEnd; this.outputSize = outputSize; this.exitCode = exitCode; this.signal = signal;
+        this.packageDigest = packageDigest;
+    }
     public void markRunning(String workerId) { status = "Judging"; this.workerId = workerId; judgeStartedAt = LocalDateTime.now(); }
     public void markFinished(String verdict) { status = verdict; this.verdict = verdict; finishedAt = LocalDateTime.now(); }
-    public void overrideVerdict(String verdict) { this.status = verdict; this.verdict = verdict; this.finishedAt = LocalDateTime.now(); }
+    public void overrideVerdict(String verdict) { overrideVerdict(verdict, 0); }
+    public void overrideVerdict(String verdict, int score) {
+        boolean accepted = "AC".equalsIgnoreCase(verdict);
+        this.status = verdict; this.verdict = verdict; this.score = score;
+        this.passed = accepted ? total : 0;
+        this.testcaseResults = null; this.errorMessage = null;
+        this.finishedAt = LocalDateTime.now(); this.attemptId++;
+    }
+    /** 将复判候选结果写回原提交，并把 attempt 推进到候选版本。 */
+    public void applyCandidate(ContestSubmission candidate) {
+        this.status = candidate.status; this.verdict = candidate.verdict; this.passed = candidate.passed;
+        this.total = candidate.total; this.score = candidate.score; this.cpuTime = candidate.cpuTime;
+        this.wallTime = candidate.wallTime; this.memory = candidate.memory; this.testcaseResults = candidate.testcaseResults;
+        this.attemptId = candidate.attemptId; this.finishedAt = LocalDateTime.now();
+    }
+    public void markQueued() { this.status = "Pending"; }
     public void recordResult(String verdict, Integer cpuTime, Integer memory, String testcaseResults, int passed, int total) { this.status = verdict; this.verdict = verdict; this.cpuTime = cpuTime; this.memory = memory == null ? null : memory.longValue(); this.testcaseResults = testcaseResults; this.passed = passed; this.total = total; this.finishedAt = LocalDateTime.now(); }
 }

@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface FavoriteRepository extends JpaRepository<Favorite, Integer> {
-    List<Favorite> findByUserIdOrderByIdDesc(Integer userId);
-    boolean existsByUserIdAndProblemId(Integer userId, Integer problemId);
-    void deleteByUserIdAndProblemId(Integer userId, Integer problemId);
+    List<Favorite> findByUser_IdOrderByIdDesc(Integer userId);
+    boolean existsByUser_IdAndProblemId(Integer userId, Integer problemId);
+    void deleteByUser_IdAndProblemId(Integer userId, Integer problemId);
 }

@@ -12,7 +12,14 @@ public class ContestTestcase extends BaseEntity {
     @Column(name = "is_sample") private boolean sample;
     @Column(name = "sort_order") private int sortOrder;
     protected ContestTestcase() {}
+    public static ContestTestcase create(ContestProblem problem, String inputData, String expectedOutput, boolean sample, int sortOrder) {
+        ContestTestcase item = new ContestTestcase();
+        item.contestProblem = problem; item.inputData = inputData; item.expectedOutput = expectedOutput;
+        item.sample = sample; item.sortOrder = sortOrder;
+        return item;
+    }
     public Integer getContestProblemId() { return contestProblem == null ? null : contestProblem.getId(); }
+    public boolean isSample() { return sample; }
     public String getInputData() { return inputData; }
     public String getExpectedOutput() { return expectedOutput; }
     public int getSortOrder() { return sortOrder; }

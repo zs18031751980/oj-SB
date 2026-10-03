@@ -20,5 +20,7 @@ public class ContestClarification extends BaseEntity {
     public Integer getId() { return super.getId(); }
     public String getQuestion() { return question; }
     public String getAnswer() { return answer; }
+    public Integer getClaimedBy() { return claimedBy; }
+    public void setClaimedBy(Integer userId) { this.claimedBy = userId; }
     public void answer(Integer userId, String value, boolean broadcast) { this.answer = value; this.answeredBy = userId; this.broadcast = broadcast; }
 }

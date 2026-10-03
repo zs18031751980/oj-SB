@@ -26,6 +26,34 @@ public class ContestProblem extends BaseEntity {
     @Column(name = "checker_config", columnDefinition = "text") private String checkerConfig = "{\"checker\":\"text\"}";
     @Column(name = "package_digest", length = 64) private String packageDigest;
     protected ContestProblem() {}
+    public static ContestProblem create(Contest contest, String problemIndex, String title, String description,
+                                        String inputDesc, String outputDesc, String correctAnswer, int timeLimit,
+                                        int memoryLimit, String difficulty, String language, String samples, int sortOrder) {
+        ContestProblem item = new ContestProblem();
+        item.contest = contest; item.problemIndex = problemIndex; item.title = title; item.description = description;
+        item.inputDesc = inputDesc == null ? "" : inputDesc; item.outputDesc = outputDesc == null ? "" : outputDesc;
+        item.correctAnswer = correctAnswer; item.timeLimit = timeLimit; item.memoryLimit = memoryLimit;
+        item.difficulty = difficulty == null ? "中等" : difficulty; item.language = language == null ? "cpp" : language;
+        item.samples = samples == null || samples.isBlank() ? "[]" : samples; item.sortOrder = sortOrder;
+        return item;
+    }
+    public void updateAsset(String problemIndex, String title, String description, String inputDesc, String outputDesc,
+                            String correctAnswer, Integer timeLimit, Integer memoryLimit, String difficulty,
+                            String language, String samples, Integer sortOrder) {
+        if (problemIndex != null && !problemIndex.isBlank()) this.problemIndex = problemIndex;
+        if (title != null && !title.isBlank()) this.title = title;
+        if (description != null) this.description = description;
+        if (inputDesc != null) this.inputDesc = inputDesc;
+        if (outputDesc != null) this.outputDesc = outputDesc;
+        if (correctAnswer != null) this.correctAnswer = correctAnswer;
+        if (timeLimit != null) this.timeLimit = timeLimit;
+        if (memoryLimit != null) this.memoryLimit = memoryLimit;
+        if (difficulty != null) this.difficulty = difficulty;
+        if (language != null && !language.isBlank()) this.language = language;
+        if (samples != null) this.samples = samples;
+        if (sortOrder != null) this.sortOrder = sortOrder;
+    }
+    public void bumpValidation() { this.validationVersion++; this.validationStatus = "PENDING"; this.validationError = null; }
     public Integer getId() { return super.getId(); }
     public String getProblemIndex() { return problemIndex; }
     public String getTitle() { return title; }
@@ -41,7 +69,19 @@ public class ContestProblem extends BaseEntity {
     public String getPackageDigest() { return packageDigest; }
     public int getValidationVersion() { return validationVersion; }
     public String getValidationStatus() { return validationStatus; }
+    public String getValidationError() { return validationError; }
+    public int getSortOrder() { return sortOrder; }
+    public int getScore() { return score; }
     public void attachPackage(String digest) { this.packageDigest = digest; }
+    public void activatePackage(String digest, int timeLimit, int memoryLimit, String checkerConfig, String correctAnswer, String language) {
+        this.packageDigest = digest; this.timeLimit = timeLimit; this.memoryLimit = memoryLimit;
+        this.checkerConfig = checkerConfig == null || checkerConfig.isBlank() ? "{\"checker\":\"text\"}" : checkerConfig;
+        this.correctAnswer = correctAnswer; this.language = language == null ? "cpp" : language;
+        this.validationStatus = "VALID"; this.validationError = null;
+    }
     public void markValidated() { this.validationStatus = "VALID"; this.validationError = null; }
+    public void markValidationFailed(String error) { this.validationStatus = "INVALID"; this.validationError = error == null ? null : (error.length() > 1000 ? error.substring(0, 1000) : error); }
+    public String getCorrectAnswer() { return correctAnswer; }
+    public String getLanguage() { return language; }
     public void updateCheckerConfig(String checkerConfig) { this.checkerConfig = checkerConfig == null || checkerConfig.isBlank() ? "{\"checker\":\"text\"}" : checkerConfig; }
 }

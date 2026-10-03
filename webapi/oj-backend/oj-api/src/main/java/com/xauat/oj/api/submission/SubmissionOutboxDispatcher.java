@@ -1,5 +1,6 @@
 package com.xauat.oj.api.submission;
 
+import com.xauat.oj.common.constant.JudgeQueues;
 import com.xauat.oj.core.submission.domain.SubmissionOutbox;
 import com.xauat.oj.core.submission.repository.SubmissionOutboxRepository;
 import com.xauat.oj.infrastructure.queue.JudgeQueue;
@@ -23,7 +24,7 @@ public class SubmissionOutboxDispatcher {
     public void dispatch() {
         for (SubmissionOutbox outbox : outboxes.claimPending()) {
             try {
-                queue.publish("oj:judge:queue", outbox.getSubmission().getJobId());
+                queue.publishOnce(JudgeQueues.REGULAR, outbox.getSubmission().getJobId(), 604800);
                 outbox.markDispatched();
                 outboxes.save(outbox);
             } catch (RuntimeException exception) {

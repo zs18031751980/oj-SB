@@ -15,9 +15,15 @@ public class ContestPackage {
     @Column(name = "updated_at", nullable = false) private java.time.LocalDateTime updatedAt;
     protected ContestPackage() {}
     public static ContestPackage create(String digest, ContestProblem problem, Integer actorId, String payload) { ContestPackage item = new ContestPackage(); item.digest = digest; item.problem = problem; item.actorId = actorId; item.payload = payload; item.createdAt = java.time.LocalDateTime.now(); item.updatedAt = item.createdAt; return item; }
+    public static ContestPackage staged(String digest, ContestProblem problem, Integer actorId, String payload) { ContestPackage item = create(digest, problem, actorId, payload); item.validationState = "PENDING"; item.validationError = null; return item; }
     public String getDigest() { return digest; }
-    public Integer getProblemId() { return problem.getId(); }
+    public Integer getProblemId() { return problem == null ? null : problem.getId(); }
+    public Integer getActorId() { return actorId; }
     public String getPayload() { return payload; }
     public String getValidationState() { return validationState; }
+    public String getValidationError() { return validationError; }
+    public void markValidating() { this.validationState = "RUNNING"; this.updatedAt = java.time.LocalDateTime.now(); }
+    public void markValid() { this.validationState = "VALID"; this.validationError = null; this.updatedAt = java.time.LocalDateTime.now(); }
+    public void markInvalid(String error) { this.validationState = "INVALID"; this.validationError = error == null ? null : (error.length() > 1000 ? error.substring(0, 1000) : error); this.updatedAt = java.time.LocalDateTime.now(); }
     public void replacePayload(String payload, Integer actorId) { this.payload = payload; this.actorId = actorId; this.validationState = "VALID"; this.validationError = null; this.updatedAt = java.time.LocalDateTime.now(); }
 }

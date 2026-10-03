@@ -1,0 +1,13 @@
+# 判题沙箱镜像：包含编译/运行工具链与独立进程监督器 execution_runtime.py。
+# 由 Judge Worker 通过 Docker CLI 以 network=none/read-only/cap-drop 等参数启动。
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc g++ python3 openjdk-17-jdk-headless golang-go nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY sandbox/execution_runtime.py /opt/execution_runtime.py
+RUN chmod 0755 /opt/execution_runtime.py
+
+# 运行时不使用 shell，入口由 Worker 以 `python3 /opt/execution_runtime.py` 覆盖。
+ENTRYPOINT ["python3", "/opt/execution_runtime.py"]

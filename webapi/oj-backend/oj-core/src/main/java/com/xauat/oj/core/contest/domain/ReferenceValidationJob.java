@@ -18,4 +18,6 @@ public class ReferenceValidationJob {
     public int getVersion() { return version; }
     public String getState() { return state; }
     public void markQueued() { state = "QUEUED"; updatedAt = java.time.LocalDateTime.now(); }
+    public void markDispatched() { state = "DISPATCHED"; updatedAt = java.time.LocalDateTime.now(); }
+    public void markDone() { state = "DONE"; updatedAt = java.time.LocalDateTime.now(); }
 }

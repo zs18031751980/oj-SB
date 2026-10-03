@@ -42,7 +42,13 @@ const handlePasswordLogin = async () => {
   loginError.value = '';
 
   try {
-    await authStore.loginWithProviderPassword('iOSClub', trimmedIdentifier, password.value, remember.value);
+    try {
+      // 本地账号密码登录
+      await authStore.loginWithPassword(trimmedIdentifier, password.value, remember.value);
+    } catch (localError) {
+      // 本地账号不可用（如外部 SSO 账号）时，回退到 OAuth 提供商密码登录
+      await authStore.loginWithProviderPassword('iOSClub', trimmedIdentifier, password.value, remember.value);
+    }
     await router.replace(safeNext.value);
   } catch (error) {
     loginError.value = error instanceof Error ? error.message : '登录失败，请稍后重试';

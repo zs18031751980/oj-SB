@@ -1,0 +1,124 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: oj
+      POSTGRES_PASSWORD: oj
+      POSTGRES_DB: oj
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oj"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: oj-api
+    environment:
+      OJ_DB_URL: jdbc:postgresql://postgres:5432/oj
+      OJ_DB_USERNAME: oj
+      OJ_DB_PASSWORD: oj
+      OJ_REDIS_HOST: redis
+      OJ_REDIS_PORT: 6379
+      OJ_JWT_SECRET: change-this-secret-in-production-change-this-secret-in-production
+      OJ_COOKIE_SECURE: "true"
+      OJ_REQUIRE_WORKER: "true"
+      METRICS_TOKEN: change-me-metrics-token
+      OJ_JUDGE0_URL: http://judge0-server:2358
+      OJ_JUDGE0_ENABLED: "true"
+    ports:
+      - "6173:6173"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      judge0-server:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      OJ_DB_URL: jdbc:postgresql://postgres:5432/oj
+      OJ_DB_USERNAME: oj
+      OJ_DB_PASSWORD: oj
+      OJ_REDIS_HOST: redis
+      OJ_REDIS_PORT: 6379
+      OJ_JWT_SECRET: change-this-secret-in-production-change-this-secret-in-production
+      OJ_JUDGE_ENABLED: "true"
+      OJ_JUDGE_EXECUTOR: judge0
+      OJ_JUDGE0_URL: http://judge0-server:2358
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      judge0-server:
+        condition: service_started
+
+  # ---- Judge0 CE（自托管，开源免费）----
+  judge0-server:
+    image: judge0/judge0:1.13.1
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    ports:
+      - "2358:2358"
+    privileged: true
+    restart: always
+    depends_on:
+      judge0-db:
+        condition: service_started
+      judge0-redis:
+        condition: service_started
+
+  judge0-workers:
+    image: judge0/judge0:1.13.1
+    command: ["./scripts/workers"]
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    privileged: true
+    restart: always
+    depends_on:
+      judge0-db:
+        condition: service_started
+      judge0-redis:
+        condition: service_started
+
+  judge0-db:
+    image: postgres:16.2
+    environment:
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0_secret_change_me
+    volumes:
+      - judge0db:/var/lib/postgresql/data
+
+  judge0-redis:
+    image: redis:7.2.4
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - judge0redis:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  judge0db:
+  judge0redis:
