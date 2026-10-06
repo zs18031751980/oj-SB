@@ -102,9 +102,15 @@ test('个人资料页显示当前登录用户', async ({ page }) => {
   await expect(page.locator('body')).toContainText(/smoke/i, { timeout: 30000 });
 });
 
-test('未登录访问受保护页面会被引导到登录页', async ({ page }) => {
+test('未登录访问受保护页面会触发 OAuth 登录', async ({ page }) => {
+  let loginStarted = '';
+  // 拦截 OAuth 启动，避免真实跳转到第三方提供方
+  await page.route('**/auth/login/iOSClub*', route => {
+    loginStarted = route.request().url();
+    return route.fulfill({ status: 200, contentType: 'text/html', body: '<html>oauth</html>' });
+  });
   await page.goto('/favorites');
-  await expect(page).toHaveURL(/\/login/, { timeout: 20000 });
+  await expect.poll(() => loginStarted).toContain('/auth/login/iOSClub');
 });
 
 test('可通过登录页使用本地账号密码登录', async ({ page }) => {
