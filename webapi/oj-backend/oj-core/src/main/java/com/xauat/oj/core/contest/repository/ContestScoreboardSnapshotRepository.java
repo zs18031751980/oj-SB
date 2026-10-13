@@ -6,7 +6,7 @@ import java.util.Optional;
  * 赛事记分板快照仓储。
  * <p>管理赛事记分板快照实体 {@link ContestScoreboardSnapshot} 的持久化与按类型查询。</p>
  */
-public interface ContestScoreboardSnapshotRepository extends JpaRepository<ContestScoreboardSnapshot,Integer> {
+public interface ContestScoreboardSnapshotRepository extends JpaRepository<ContestScoreboardSnapshot, Integer> {
     /**
      * 查询某赛事指定类型的记分板快照。
      *

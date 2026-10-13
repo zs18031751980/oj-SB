@@ -27,8 +27,12 @@ public class UserCodeController {
     /** 每个用户最多保留的题目代码数。 */
     private static final int MAX_PROBLEMS_PER_USER = 5;
 
-    private final CurrentUser currentUser; private final UserCodeRepository codes;
-    public UserCodeController(CurrentUser currentUser, UserCodeRepository codes) { this.currentUser = currentUser; this.codes = codes; }
+    private final CurrentUser currentUser;
+    private final UserCodeRepository codes;
+    public UserCodeController(CurrentUser currentUser, UserCodeRepository codes) {
+        this.currentUser = currentUser;
+        this.codes = codes;
+    }
 
     /**
      * 保存代码草稿（同一用户+题目+语言覆盖更新）。
@@ -41,17 +45,23 @@ public class UserCodeController {
      */
     @PutMapping("/code")
     @Transactional
-    public Map<String, Object> save(@RequestHeader(value = "Authorization", required = false) String authorization, @Valid @RequestBody CodeRequest request) {
+    public Map<String, Object> save(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @Valid @RequestBody
+            CodeRequest request) {
         var user = currentUser.require(authorization);
         String language = request.language() == null || request.language().isBlank() ? "cpp" : request.language();
         var existing = codes.findByUser_IdAndProblemIdAndLanguage(user.getId(), request.problemId(), language);
         if (existing.isPresent()) {
             // 已存在则直接覆盖代码内容。
-            var code = existing.get(); code.setCode(request.code()); codes.save(code);
+            var code = existing.get();
+            code.setCode(request.code());
+            codes.save(code);
         } else {
             // 达到题目数上限时淘汰最旧记录，保证新草稿可写入。
             if (codes.countDistinctProblems(user.getId()) >= MAX_PROBLEMS_PER_USER) {
-                codes.findFirstByUser_IdOrderByUpdatedAtAscIdAsc(user.getId()).ifPresent(oldest -> codes.deleteById(oldest.getId()));
+                codes.findFirstByUser_IdOrderByUpdatedAtAscIdAsc(user.getId())
+                        .ifPresent(oldest -> codes.deleteById(oldest.getId()));
             }
             codes.save(UserCode.of(user, request.problemId(), language, request.code()));
         }
@@ -65,9 +75,11 @@ public class UserCodeController {
      * @return 代码草稿列表
      */
     @GetMapping("/code")
-    public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false)
+    String authorization) {
         var user = currentUser.require(authorization);
-        List<Map<String, Object>> data = codes.findByUser_IdOrderByUpdatedAtDescIdDesc(user.getId()).stream().limit(MAX_PROBLEMS_PER_USER)
+        List<Map<String, Object>> data = codes.findByUser_IdOrderByUpdatedAtDescIdDesc(user.getId()).stream()
+                .limit(MAX_PROBLEMS_PER_USER)
                 .map(item -> {
                     Map<String, Object> body = new LinkedHashMap<>();
                     body.put("problem_id", item.getProblemId());
@@ -92,15 +104,24 @@ public class UserCodeController {
      * @return 代码草稿或空
      */
     @GetMapping("/code/{problemId}")
-    public ResponseEntity<?> get(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer problemId,
-                                 @RequestParam(defaultValue = "cpp") String language) {
+    public ResponseEntity<?> get(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer problemId,
+            @RequestParam(defaultValue = "cpp")
+            String language) {
         var user = currentUser.require(authorization);
         return codes.findByUser_IdAndProblemIdAndLanguage(user.getId(), problemId, language)
-                .<ResponseEntity<?>>map(item -> ResponseEntity.ok(Map.of("problem_id", item.getProblemId(), "language", item.getLanguage(), "code", item.getCode())))
+                .<ResponseEntity<?>>map(item -> ResponseEntity.ok(Map.of("problem_id", item.getProblemId(), "language",
+                        item.getLanguage(), "code", item.getCode())))
                 .orElseGet(() -> ResponseEntity.ok(java.util.Collections.singletonMap("code", null)));
     }
 
     /** 代码草稿请求体，兼容 {@code problem_id} / {@code problemId} 字段名。 */
-    public record CodeRequest(@JsonProperty("problem_id") @JsonAlias("problemId") @NotNull Integer problemId,
-                              @NotBlank String language, @NotBlank String code) {}
+    public record CodeRequest(@JsonProperty("problem_id") @JsonAlias("problemId") @NotNull
+    Integer problemId,
+            @NotBlank
+            String language, @NotBlank
+            String code) {
+    }
 }

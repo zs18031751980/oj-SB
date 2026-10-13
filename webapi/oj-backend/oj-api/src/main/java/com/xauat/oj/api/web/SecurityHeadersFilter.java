@@ -32,15 +32,18 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         // 认证、提交、个人与后台等敏感响应禁止中间层/浏览器缓存
         boolean sensitive = NO_STORE_PREFIXES.stream().anyMatch(path::startsWith) || path.contains("/submission");
-        if (sensitive) response.setHeader("Cache-Control", "no-store");
+        if (sensitive)
+            response.setHeader("Cache-Control", "no-store");
         // 仅在 HTTPS（含代理转发声明）时下发 HSTS
-        if (isSecure(request)) response.setHeader("Strict-Transport-Security", "max-age=31536000");
+        if (isSecure(request))
+            response.setHeader("Strict-Transport-Security", "max-age=31536000");
         chain.doFilter(request, response);
     }
 
     /** 判断请求是否经由 HTTPS，兼容反向代理设置的 X-Forwarded-Proto。 */
     private boolean isSecure(HttpServletRequest request) {
-        if (request.isSecure()) return true;
+        if (request.isSecure())
+            return true;
         String proto = request.getHeader("X-Forwarded-Proto");
         return proto != null && proto.split(",", 2)[0].trim().equalsIgnoreCase("https");
     }

@@ -62,8 +62,11 @@ public class OriginValidationFilter extends OncePerRequestFilter {
             String originHost = URI.create(origin).getHost();
             String forwarded = request.getHeader("X-Forwarded-Host");
             // 代理链中取第一个 Host；再剥掉端口只比主机名
-            String host = forwarded != null && !forwarded.isBlank() ? forwarded.split(",", 2)[0].trim() : request.getHeader("Host");
-            if (host == null) return false;
+            String host = forwarded != null && !forwarded.isBlank()
+                    ? forwarded.split(",", 2)[0].trim()
+                    : request.getHeader("Host");
+            if (host == null)
+                return false;
             String requestHost = host.contains(":") ? host.substring(0, host.indexOf(':')) : host;
             return originHost != null && originHost.equalsIgnoreCase(requestHost);
         } catch (RuntimeException exception) {

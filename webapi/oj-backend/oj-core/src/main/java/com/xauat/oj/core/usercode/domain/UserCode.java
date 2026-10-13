@@ -17,7 +17,9 @@ import jakarta.persistence.UniqueConstraint;
  * 通过 {@code (user_id, problem_id, language)} 唯一约束保证每组仅保留一份草稿。</p>
  */
 @Entity
-@Table(name = "user_codes", uniqueConstraints = @UniqueConstraint(name = "uq_user_codes_user_problem_language", columnNames = {"user_id", "problem_id", "language"}))
+@Table(name = "user_codes", uniqueConstraints =
+        @UniqueConstraint(name = "uq_user_codes_user_problem_language", columnNames = {
+        "user_id", "problem_id", "language"}))
 public class UserCode extends BaseEntity {
     /** 代码所属用户。 */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -33,15 +35,31 @@ public class UserCode extends BaseEntity {
     @Column(nullable = false, columnDefinition = "text")
     private String code;
 
-    protected UserCode() {}
+    protected UserCode() {
+    }
     /** 构建用户代码草稿。 */
-    public static UserCode of(User user, Integer problemId, String language, String code) { UserCode item = new UserCode(); item.user = user; item.problemId = problemId; item.language = language; item.code = code; return item; }
+    public static UserCode of(User user, Integer problemId, String language, String code) {
+        UserCode item = new UserCode();
+        item.user = user;
+        item.problemId = problemId;
+        item.language = language;
+        item.code = code;
+        return item;
+    }
     /** 返回题目 ID。 */
-    public Integer getProblemId() { return problemId; }
+    public Integer getProblemId() {
+        return problemId;
+    }
     /** 返回语言。 */
-    public String getLanguage() { return language; }
+    public String getLanguage() {
+        return language;
+    }
     /** 返回代码内容。 */
-    public String getCode() { return code; }
+    public String getCode() {
+        return code;
+    }
     /** 更新代码内容。 */
-    public void setCode(String code) { this.code = code; }
+    public void setCode(String code) {
+        this.code = code;
+    }
 }

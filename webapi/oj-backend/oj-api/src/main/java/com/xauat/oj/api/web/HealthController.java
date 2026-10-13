@@ -29,10 +29,15 @@ public class HealthController {
     private final long workerFreshSeconds;
 
     public HealthController(JdbcTemplate jdbcTemplate, StringRedisTemplate redis, ObjectMapper mapper,
-                            @Value("${oj.readiness.require-worker:false}") boolean requireWorker,
-                            @Value("${oj.readiness.worker-fresh-seconds:45}") long workerFreshSeconds) {
-        this.jdbcTemplate = jdbcTemplate; this.redis = redis; this.mapper = mapper;
-        this.requireWorker = requireWorker; this.workerFreshSeconds = workerFreshSeconds;
+            @Value("${oj.readiness.require-worker:false}")
+            boolean requireWorker,
+            @Value("${oj.readiness.worker-fresh-seconds:45}")
+            long workerFreshSeconds) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.redis = redis;
+        this.mapper = mapper;
+        this.requireWorker = requireWorker;
+        this.workerFreshSeconds = workerFreshSeconds;
     }
 
     /**
@@ -42,7 +47,9 @@ public class HealthController {
      * @return 固定 ok 状态
      */
     @GetMapping({"/", "/healthz"})
-    public Map<String, Object> health(HttpServletRequest request) { return body("ok", request); }
+    public Map<String, Object> health(HttpServletRequest request) {
+        return body("ok", request);
+    }
 
     /**
      * 就绪探针，依赖任一不可用即返回 503。
@@ -53,10 +60,16 @@ public class HealthController {
     @GetMapping("/readyz")
     public ResponseEntity<Map<String, Object>> ready(HttpServletRequest request) {
         // 依次探测数据库与 Redis，任一失败立即报告并提供具体依赖名，便于排障
-        try { jdbcTemplate.queryForObject("select 1", Integer.class); }
-        catch (RuntimeException exception) { return ResponseEntity.status(503).body(body("database unavailable", request)); }
-        try { redis.getConnectionFactory().getConnection().ping(); }
-        catch (RuntimeException exception) { return ResponseEntity.status(503).body(body("redis unavailable", request)); }
+        try {
+            jdbcTemplate.queryForObject("select 1", Integer.class);
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(503).body(body("database unavailable", request));
+        }
+        try {
+            redis.getConnectionFactory().getConnection().ping();
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(503).body(body("redis unavailable", request));
+        }
         // 仅在显式要求时才以判题 worker 可用性作为就绪条件
         if (requireWorker && freshWorkerCount() == 0) {
             return ResponseEntity.status(503).body(body("no judge worker available", request));
@@ -72,8 +85,12 @@ public class HealthController {
      */
     @GetMapping("/healthz/db")
     public ResponseEntity<Map<String, Object>> database(HttpServletRequest request) {
-        try { jdbcTemplate.queryForObject("select 1", Integer.class); return ResponseEntity.ok(body("ok", request)); }
-        catch (RuntimeException exception) { return ResponseEntity.status(503).body(body("database unavailable", request)); }
+        try {
+            jdbcTemplate.queryForObject("select 1", Integer.class);
+            return ResponseEntity.ok(body("ok", request));
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(503).body(body("database unavailable", request));
+        }
     }
 
     /** 统计心跳时间在新鲜阈值内的 worker 数量；Redis 异常时保守返回 0。 */
@@ -81,15 +98,18 @@ public class HealthController {
         try {
             long now = Instant.now().getEpochSecond();
             Set<String> keys = redis.keys("judge:worker:*");
-            if (keys == null) return 0;
+            if (keys == null)
+                return 0;
             long fresh = 0;
             for (String key : keys) {
                 String value = redis.opsForValue().get(key);
-                if (value == null) continue;
+                if (value == null)
+                    continue;
                 // 以心跳时间戳判断存活，避免依赖会残留的注册键
                 var node = mapper.readTree(value);
                 long stamp = node.path("heartbeat_unix").asLong(0);
-                if (now - stamp <= workerFreshSeconds) fresh++;
+                if (now - stamp <= workerFreshSeconds)
+                    fresh++;
             }
             return fresh;
         } catch (Exception exception) {

@@ -18,7 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class ContestOutboxDispatcher {
     private final ContestJudgeOutboxRepository outboxes;
     private final JudgeQueue queue;
-    public ContestOutboxDispatcher(ContestJudgeOutboxRepository outboxes, JudgeQueue queue) { this.outboxes = outboxes; this.queue = queue; }
+    public ContestOutboxDispatcher(ContestJudgeOutboxRepository outboxes, JudgeQueue queue) {
+        this.outboxes = outboxes;
+        this.queue = queue;
+    }
 
     /**
      * 定时派发：拉取一批待发 outbox，逐条投递到判题队列。
@@ -29,8 +32,14 @@ public class ContestOutboxDispatcher {
     public void dispatch() {
         // claimPending 会锁定一批待发记录，避免多实例重复派发
         for (var outbox : outboxes.claimPending()) {
-            try { queue.publishOnce(queueFor(outbox.getSubmission()), outbox.getSubmission().getJobId(), 604800); outbox.markDispatched(); outboxes.save(outbox); }
-            catch (RuntimeException e) { outbox.markFailed(e.getMessage()); outboxes.save(outbox); }
+            try {
+                queue.publishOnce(queueFor(outbox.getSubmission()), outbox.getSubmission().getJobId(), 604800);
+                outbox.markDispatched();
+                outboxes.save(outbox);
+            } catch (RuntimeException e) {
+                outbox.markFailed(e.getMessage());
+                outboxes.save(outbox);
+            }
         }
     }
 
@@ -48,7 +57,8 @@ public class ContestOutboxDispatcher {
      * @return 目标判题队列名
      */
     public static String queueFor(boolean rejudge, boolean contestEligible) {
-        if (rejudge) return JudgeQueues.REJUDGE;
+        if (rejudge)
+            return JudgeQueues.REJUDGE;
         return contestEligible ? JudgeQueues.CONTEST : JudgeQueues.PRACTICE;
     }
 }

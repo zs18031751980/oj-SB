@@ -22,19 +22,23 @@ public class OAuthProviderRegistry {
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final Map<String, JsonNode> discoveryCache = new ConcurrentHashMap<>();
 
-    public OAuthProviderRegistry(ObjectMapper mapper) { this.mapper = mapper; }
+    public OAuthProviderRegistry(ObjectMapper mapper) {
+        this.mapper = mapper;
+    }
 
     /** 直接环境变量优先；缺失时回退到发现的 OIDC 元数据字段。 */
     public String property(String provider, String key) {
         String direct = System.getenv(("OJ_OAUTH_" + provider + "_" + key).toUpperCase(Locale.ROOT).replace('-', '_'));
-        if (direct != null && !direct.isBlank()) return direct;
+        if (direct != null && !direct.isBlank())
+            return direct;
         String field = switch (key) {
             case "authorization-uri" -> "authorization_endpoint";
             case "token-uri" -> "token_endpoint";
             case "userinfo-uri" -> "userinfo_endpoint";
             default -> null;
         };
-        if (field == null) return null;
+        if (field == null)
+            return null;
         JsonNode metadata = discovery(provider);
         String value = metadata == null ? null : metadata.path(field).asText(null);
         return value == null || value.isBlank() ? null : value;
@@ -62,13 +66,16 @@ public class OAuthProviderRegistry {
      */
     public String authorizationUrl(String provider, String redirectUri, String state, String codeChallenge) {
         String authorizationUri = property(provider, "authorization-uri");
-        if (authorizationUri == null) return null;
+        if (authorizationUri == null)
+            return null;
         String scope = property(provider, "scope");
         // 未显式配置 scope 时按 GitHub 与通用 OIDC 的差异给出合理默认值
         if (scope == null || scope.isBlank()) {
             scope = "github".equalsIgnoreCase(provider) ? "read:user user:email" : "openid profile email";
         }
-        String resolvedRedirect = redirectUri != null && !redirectUri.isBlank() ? redirectUri : property(provider, "redirect-uri");
+        String resolvedRedirect = redirectUri != null && !redirectUri.isBlank()
+                ? redirectUri
+                : property(provider, "redirect-uri");
         StringBuilder url = new StringBuilder(authorizationUri).append("?response_type=code")
                 .append("&client_id=").append(enc(property(provider, "client-id")))
                 .append("&redirect_uri=").append(enc(resolvedRedirect))
@@ -95,15 +102,19 @@ public class OAuthProviderRegistry {
     /** 获取并缓存 OIDC 发现文档；结果按 provider 缓存，失败时返回 null。 */
     private JsonNode discovery(String provider) {
         return discoveryCache.computeIfAbsent(provider, key -> {
-            String metadataUrl = System.getenv(("OJ_OAUTH_" + provider + "_SERVER_METADATA_URL").toUpperCase(Locale.ROOT).replace('-', '_'));
+            String metadataUrl = System.getenv(
+                    ("OJ_OAUTH_" + provider + "_SERVER_METADATA_URL").toUpperCase(Locale.ROOT).replace('-', '_'));
             if (metadataUrl == null || metadataUrl.isBlank()) {
                 // 没有显式的元数据地址时，按 OIDC 规范从 issuer 推导标准发现地址
-                String issuer = System.getenv(("OJ_OAUTH_" + provider + "_ISSUER").toUpperCase(Locale.ROOT).replace('-', '_'));
-                if (issuer == null || issuer.isBlank()) return null;
+                String issuer = System
+                        .getenv(("OJ_OAUTH_" + provider + "_ISSUER").toUpperCase(Locale.ROOT).replace('-', '_'));
+                if (issuer == null || issuer.isBlank())
+                    return null;
                 metadataUrl = issuer.replaceAll("/$", "") + "/.well-known/openid-configuration";
             }
             try {
-                HttpRequest request = HttpRequest.newBuilder(URI.create(metadataUrl)).timeout(Duration.ofSeconds(5)).GET().build();
+                HttpRequest request = HttpRequest.newBuilder(URI.create(metadataUrl)).timeout(Duration.ofSeconds(5))
+                        .GET().build();
                 return mapper.readTree(client.send(request, HttpResponse.BodyHandlers.ofString()).body());
             } catch (Exception exception) {
                 return null;
@@ -117,5 +128,7 @@ public class OAuthProviderRegistry {
      * @param value 原始值
      * @return UTF-8 百分号编码后的字符串
      */
-    public static String enc(String value) { return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8); }
+    public static String enc(String value) {
+        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
+    }
 }

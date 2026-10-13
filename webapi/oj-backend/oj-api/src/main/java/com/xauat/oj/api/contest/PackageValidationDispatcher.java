@@ -16,7 +16,8 @@ public class PackageValidationDispatcher {
     private final JudgeQueue queue;
 
     public PackageValidationDispatcher(ContestPackageRepository packages, JudgeQueue queue) {
-        this.packages = packages; this.queue = queue;
+        this.packages = packages;
+        this.queue = queue;
     }
 
     /**
@@ -28,8 +29,12 @@ public class PackageValidationDispatcher {
     public void dispatch() {
         // 每次最多取 50 个最久未更新的 PENDING 题包，按更新时间升序保证公平
         for (var pkg : packages.findTop50ByValidationStateInOrderByUpdatedAtAsc(List.of("PENDING"))) {
-            try { queue.publishOnce(JudgeQueues.TESTCASE_GEN, "package:" + pkg.getDigest(), 604800); pkg.markValidating(); packages.save(pkg); }
-            catch (RuntimeException ignored) { }
+            try {
+                queue.publishOnce(JudgeQueues.TESTCASE_GEN, "package:" + pkg.getDigest(), 604800);
+                pkg.markValidating();
+                packages.save(pkg);
+            } catch (RuntimeException ignored) {
+            }
         }
     }
 }

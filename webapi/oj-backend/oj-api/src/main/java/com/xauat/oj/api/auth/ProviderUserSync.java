@@ -17,7 +17,10 @@ public class ProviderUserSync {
     private final UserRepository users;
     private final AuthSessionRepository sessions;
 
-    public ProviderUserSync(UserRepository users, AuthSessionRepository sessions) { this.users = users; this.sessions = sessions; }
+    public ProviderUserSync(UserRepository users, AuthSessionRepository sessions) {
+        this.users = users;
+        this.sessions = sessions;
+    }
 
     /**
      * 按供应商身份同步本地用户：存在则更新资料与角色，不存在则创建。
@@ -31,7 +34,8 @@ public class ProviderUserSync {
      * @return 同步后的本地用户
      */
     @Transactional
-    public User sync(String provider, String providerId, JsonNode profile, String username, String email, String avatar) {
+    public User sync(String provider, String providerId, JsonNode profile, String username, String email,
+            String avatar) {
         String incomingRole = OidcClaims.highestRole(profile);
         Boolean status = OidcClaims.accountStatus(profile);
         var existing = users.findByProviderAndProviderId(provider, providerId);
@@ -47,30 +51,38 @@ public class ProviderUserSync {
                     && users.findByEmail(email).filter(other -> !other.getId().equals(user.getId())).isEmpty()) {
                 user.setEmail(email);
             }
-            if (avatar != null && !avatar.isBlank()) user.setAvatarUrl(avatar);
+            if (avatar != null && !avatar.isBlank())
+                user.setAvatarUrl(avatar);
             // providerRole 始终记录供应商角色；本地角色（localRole）优先，实现本地提权不被登录覆盖
             user.setProviderRole(incomingRole);
-            String effective = user.getLocalRole() != null && !user.getLocalRole().isBlank() ? user.getLocalRole() : incomingRole;
+            String effective = user.getLocalRole() != null && !user.getLocalRole().isBlank()
+                    ? user.getLocalRole()
+                    : incomingRole;
             boolean roleChanged = !effective.equals(user.getRole());
             user.setRole(effective);
             // 供应商停用会停用本地账号；反之本地停用不会被重新激活（不在此处 setActive(true)）
-            if (Boolean.FALSE.equals(status)) user.setActive(false);
+            if (Boolean.FALSE.equals(status))
+                user.setActive(false);
             user.markLogin();
             users.save(user);
             // 停用或角色变动时撤销所有现有会话，使旧令牌立即失效
-            if (Boolean.FALSE.equals(status) || roleChanged) sessions.revokeByUserId(user.getId());
+            if (Boolean.FALSE.equals(status) || roleChanged)
+                sessions.revokeByUserId(user.getId());
             return user;
         }
         // 新建用户：用户名缺失时用 provider_providerId 兜底，冲突时附加 providerId 保证唯一
         String finalUsername = username == null || username.isBlank() ? provider + "_" + providerId : username;
-        if (users.findByUsername(finalUsername).isPresent()) finalUsername = finalUsername + "_" + providerId;
+        if (users.findByUsername(finalUsername).isPresent())
+            finalUsername = finalUsername + "_" + providerId;
         String finalEmail = email;
         // 邮箱已属于其它账号时置空，避免破坏唯一约束
-        if (finalEmail != null && !finalEmail.isBlank() && users.findByEmail(finalEmail).isPresent()) finalEmail = null;
+        if (finalEmail != null && !finalEmail.isBlank() && users.findByEmail(finalEmail).isPresent())
+            finalEmail = null;
         User user = User.external(finalUsername, finalEmail, provider, providerId, avatar);
         user.setRole(incomingRole);
         user.setProviderRole(incomingRole);
-        if (Boolean.FALSE.equals(status)) user.setActive(false);
+        if (Boolean.FALSE.equals(status))
+            user.setActive(false);
         user.markLogin();
         return users.save(user);
     }

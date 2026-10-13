@@ -20,8 +20,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/admin/judge/dead-letters")
 public class AdminDeadLetterController {
-    private final CurrentUser currentUser; private final JudgeDeadLetterRepository deadLetters; private final JudgeQueue queue;
-    public AdminDeadLetterController(CurrentUser currentUser, JudgeDeadLetterRepository deadLetters, JudgeQueue queue) { this.currentUser = currentUser; this.deadLetters = deadLetters; this.queue = queue; }
+    private final CurrentUser currentUser;
+    private final JudgeDeadLetterRepository deadLetters;
+    private final JudgeQueue queue;
+    public AdminDeadLetterController(CurrentUser currentUser, JudgeDeadLetterRepository deadLetters, JudgeQueue queue) {
+        this.currentUser = currentUser;
+        this.deadLetters = deadLetters;
+        this.queue = queue;
+    }
 
     /**
      * 列出最近 100 条死信。
@@ -31,7 +37,14 @@ public class AdminDeadLetterController {
      * @param auth 认证头
      * @return 死信摘要列表（队列、任务 id、原因、状态）
      */
-    @GetMapping public ResponseEntity<?> list(@RequestHeader(value="Authorization", required=false) String auth) { manager(auth); return ResponseEntity.ok(deadLetters.findTop100ByOrderByIdDesc().stream().map(x -> Map.of("id", x.getId(), "queue", x.getQueue(), "job_id", x.getJobId(), "reason", x.getReason(), "state", x.getState())).toList()); }
+    @GetMapping
+    public ResponseEntity<?> list(@RequestHeader(value = "Authorization", required = false)
+    String auth) {
+        manager(auth);
+        return ResponseEntity.ok(
+                deadLetters.findTop100ByOrderByIdDesc().stream().map(x -> Map.of("id", x.getId(), "queue", x.getQueue(),
+                        "job_id", x.getJobId(), "reason", x.getReason(), "state", x.getState())).toList());
+    }
 
     /**
      * 重新投递一条未处理（OPEN）死信。
@@ -42,21 +55,43 @@ public class AdminDeadLetterController {
      * @param id   死信 id
      * @return 202 与 RETRIED 状态；不存在返回 404；已处理返回 409
      */
-    @PostMapping("/{id}/retry") @Transactional
-    public ResponseEntity<?> retry(@RequestHeader(value="Authorization", required=false) String auth, @PathVariable Integer id) { manager(auth); var item = deadLetters.findById(id).orElse(null); if (item == null) return ResponseEntity.notFound().build(); if (!"OPEN".equals(item.getState())) return ResponseEntity.status(409).body(Map.of("error", "死信已处理")); queue.publish(item.getQueue(), item.getJobId()); item.markRetried(); deadLetters.save(item); return ResponseEntity.accepted().body(Map.of("id", id, "state", "RETRIED")); }
+    @PostMapping("/{id}/retry")
+    @Transactional
+    public ResponseEntity<?> retry(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @PathVariable
+            Integer id) {
+        manager(auth);
+        var item = deadLetters.findById(id).orElse(null);
+        if (item == null)
+            return ResponseEntity.notFound().build();
+        if (!"OPEN".equals(item.getState()))
+            return ResponseEntity.status(409).body(Map.of("error", "死信已处理"));
+        queue.publish(item.getQueue(), item.getJobId());
+        item.markRetried();
+        deadLetters.save(item);
+        return ResponseEntity.accepted().body(Map.of("id", id, "state", "RETRIED"));
+    }
 
     /** 将 Redis 死信列表归档（保留最近 1000 条），避免死信堆积。 */
-    @PostMapping("/archive") @Transactional
-    public ResponseEntity<?> archive(@RequestHeader(value="Authorization", required=false) String auth) {
+    @PostMapping("/archive")
+    @Transactional
+    public ResponseEntity<?> archive(@RequestHeader(value = "Authorization", required = false)
+    String auth) {
         manager(auth);
         long total = 0;
         // 逐队列归档，仅保留每个队列最近 1000 条死信。
-        for (String name : List.of(JudgeQueues.REGULAR, JudgeQueues.CONTEST, JudgeQueues.PRACTICE, JudgeQueues.REJUDGE, JudgeQueues.TESTCASE_GEN)) {
+        for (String name : List.of(JudgeQueues.REGULAR, JudgeQueues.CONTEST, JudgeQueues.PRACTICE, JudgeQueues.REJUDGE,
+                JudgeQueues.TESTCASE_GEN)) {
             total += queue.archiveDead(name, 1000);
         }
         return ResponseEntity.ok(Map.of("archived", total));
     }
 
     /** 要求当前用户为 manager/staff，否则抛出 FORBIDDEN。 */
-    private void manager(String auth) { var user = currentUser.require(auth); if (!"manager".equals(user.getRole()) && !"staff".equals(user.getRole())) throw new com.xauat.oj.common.exception.OjException("FORBIDDEN", "权限不足"); }
+    private void manager(String auth) {
+        var user = currentUser.require(auth);
+        if (!"manager".equals(user.getRole()) && !"staff".equals(user.getRole()))
+            throw new com.xauat.oj.common.exception.OjException("FORBIDDEN", "权限不足");
+    }
 }

@@ -36,7 +36,8 @@ public class SubmissionOutboxDispatcher {
                 outboxes.save(outbox);
             } catch (RuntimeException exception) {
                 // 记录失败原因，留待下一轮重试。
-                outbox.markFailed(exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage());
+                outbox.markFailed(
+                        exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage());
                 outboxes.save(outbox);
             }
         }

@@ -28,21 +28,29 @@ public class StaticProblemCatalog {
      */
     public StaticProblemCatalog(ObjectMapper mapper) {
         try (InputStream input = getClass().getResourceAsStream("/catalog/problems.json")) {
-            if (input == null) throw new IllegalStateException("缺少 /catalog/problems.json");
+            if (input == null)
+                throw new IllegalStateException("缺少 /catalog/problems.json");
             // problems 为 {id: {题目字段...}} 结构，按数值 id 建索引。
             JsonNode root = mapper.readTree(input);
             JsonNode entries = root.path("problems");
             entries.fields().forEachRemaining(entry -> problems.put(Integer.valueOf(entry.getKey()),
-                    mapper.convertValue(entry.getValue(), new TypeReference<LinkedHashMap<String, Object>>() {})));
+                    mapper.convertValue(entry.getValue(), new TypeReference<LinkedHashMap<String, Object>>() {
+                    })));
         } catch (IOException exception) {
             throw new IllegalStateException("无法加载静态题库", exception);
         }
     }
 
     /** 按 id 查找静态题目。 */
-    public Optional<Map<String, Object>> find(Integer id) { return Optional.ofNullable(problems.get(id)); }
+    public Optional<Map<String, Object>> find(Integer id) {
+        return Optional.ofNullable(problems.get(id));
+    }
     /** 判断 id 是否属于静态题库。 */
-    public boolean contains(Integer id) { return problems.containsKey(id); }
+    public boolean contains(Integer id) {
+        return problems.containsKey(id);
+    }
     /** 返回全部静态题目（id 升序由调用方排序）。 */
-    public Map<Integer, Map<String, Object>> all() { return problems; }
+    public Map<Integer, Map<String, Object>> all() {
+        return problems;
+    }
 }

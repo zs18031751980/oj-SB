@@ -29,7 +29,8 @@ public interface ContestTestcaseRepository extends JpaRepository<ContestTestcase
      */
     @Modifying
     @Query("delete from ContestTestcase t where t.contestProblem.id = :problemId")
-    int deleteByProblemId(@Param("problemId") Integer problemId);
+    int deleteByProblemId(@Param("problemId")
+    Integer problemId);
 
     /**
      * 删除指定赛事下所有题目的测试点。
@@ -39,5 +40,6 @@ public interface ContestTestcaseRepository extends JpaRepository<ContestTestcase
      */
     @Modifying
     @Query("delete from ContestTestcase t where t.contestProblem.contest.id = :contestId")
-    int deleteByContestId(@Param("contestId") Integer contestId);
+    int deleteByContestId(@Param("contestId")
+    Integer contestId);
 }

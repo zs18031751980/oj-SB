@@ -41,8 +41,12 @@ import java.util.UUID;
 public class ContestController {
     private static final List<String> HIDDEN_STATES = List.of("DRAFT", "READY");
 
-    private final CurrentUser currentUser; private final ContestRepository contests; private final ContestParticipantRepository participants; private final ContestProblemRepository problems;
-    private final ContestSubmissionRepository submissions; private final ContestJudgeOutboxRepository outboxes;
+    private final CurrentUser currentUser;
+    private final ContestRepository contests;
+    private final ContestParticipantRepository participants;
+    private final ContestProblemRepository problems;
+    private final ContestSubmissionRepository submissions;
+    private final ContestJudgeOutboxRepository outboxes;
     private final ObjectMapper mapper;
     private final ContestTestcaseRepository testcases;
     private final ContestScoreboardService scoreboard;
@@ -52,15 +56,26 @@ public class ContestController {
     private final EntryResolver entryResolver;
     private final com.xauat.oj.api.submission.SubmissionCache submissionCache;
 
-    public ContestController(CurrentUser currentUser, ContestRepository contests, ContestParticipantRepository participants, ContestProblemRepository problems,
-                             ContestSubmissionRepository submissions, ContestJudgeOutboxRepository outboxes, ObjectMapper mapper,
-                             ContestTestcaseRepository testcases, ContestScoreboardService scoreboard,
-                             JudgementRepository judgements, ContestEventRepository events, PackageService packageService,
-                             EntryResolver entryResolver, com.xauat.oj.api.submission.SubmissionCache submissionCache) {
-        this.currentUser = currentUser; this.contests = contests; this.participants = participants; this.problems = problems;
-        this.submissions = submissions; this.outboxes = outboxes; this.mapper = mapper; this.testcases = testcases;
-        this.scoreboard = scoreboard; this.judgements = judgements; this.events = events; this.packageService = packageService;
-        this.entryResolver = entryResolver; this.submissionCache = submissionCache;
+    public ContestController(CurrentUser currentUser, ContestRepository contests,
+            ContestParticipantRepository participants, ContestProblemRepository problems,
+            ContestSubmissionRepository submissions, ContestJudgeOutboxRepository outboxes, ObjectMapper mapper,
+            ContestTestcaseRepository testcases, ContestScoreboardService scoreboard,
+            JudgementRepository judgements, ContestEventRepository events, PackageService packageService,
+            EntryResolver entryResolver, com.xauat.oj.api.submission.SubmissionCache submissionCache) {
+        this.currentUser = currentUser;
+        this.contests = contests;
+        this.participants = participants;
+        this.problems = problems;
+        this.submissions = submissions;
+        this.outboxes = outboxes;
+        this.mapper = mapper;
+        this.testcases = testcases;
+        this.scoreboard = scoreboard;
+        this.judgements = judgements;
+        this.events = events;
+        this.packageService = packageService;
+        this.entryResolver = entryResolver;
+        this.submissionCache = submissionCache;
     }
 
     /**
@@ -70,12 +85,17 @@ public class ContestController {
      * @return 比赛视图列表
      */
     @GetMapping({"", "/"})
-    public List<Map<String, Object>> list(@RequestParam(required = false) String status) {
+    public List<Map<String, Object>> list(@RequestParam(required = false)
+    String status) {
         return contests.findAll().stream()
                 // 隐藏草稿与已取消比赛，仅暴露公开可见项
-                .filter(c -> c.isPublic() && !"DRAFT".equals(c.getLifecycleState()) && !"CANCELLED".equals(c.getLifecycleState()))
+                .filter(c -> c.isPublic() && !"DRAFT".equals(c.getLifecycleState())
+                        && !"CANCELLED".equals(c.getLifecycleState()))
                 .filter(c -> status == null || status.isBlank() || status.equalsIgnoreCase(statusOf(c)))
-                .sorted(java.util.Comparator.comparing(Contest::getStartTime, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())).thenComparing(Contest::getId, java.util.Comparator.reverseOrder()))
+                .sorted(java.util.Comparator
+                        .comparing(Contest::getStartTime,
+                                java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
+                        .thenComparing(Contest::getId, java.util.Comparator.reverseOrder()))
                 .map(this::view).toList();
     }
 
@@ -88,14 +108,21 @@ public class ContestController {
      */
     @PostMapping({"", "/"})
     @Transactional
-    public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false) String authorization, @Valid @RequestBody ContestRequest request) {
+    public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @Valid @RequestBody
+            ContestRequest request) {
         var user = requireManager(authorization);
         String type = normalizeType(request.contestType());
-        if (type == null) return ResponseEntity.badRequest().body(Map.of("error", "比赛模式仅支持 ACM 或 OI"));
+        if (type == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "比赛模式仅支持 ACM 或 OI"));
         String invalid = validateTimes(request.startTime(), request.endTime(), request.freezeTime());
-        if (invalid != null) return ResponseEntity.badRequest().body(Map.of("error", invalid));
-        Contest contest = Contest.createFull(request.title().trim(), request.description().trim(), type, request.startTime(), request.endTime(),
-                user.getId(), request.penaltyTime() == null ? 20 : request.penaltyTime(), request.freezeTime(), inferStatus(request.startTime(), request.endTime()));
+        if (invalid != null)
+            return ResponseEntity.badRequest().body(Map.of("error", invalid));
+        Contest contest = Contest.createFull(request.title().trim(), request.description().trim(), type,
+                request.startTime(), request.endTime(),
+                user.getId(), request.penaltyTime() == null ? 20 : request.penaltyTime(), request.freezeTime(),
+                inferStatus(request.startTime(), request.endTime()));
         return ResponseEntity.status(201).body(view(contests.save(contest)));
     }
 
@@ -107,9 +134,13 @@ public class ContestController {
      * @return 比赛视图或 404
      */
     @GetMapping("/{id}")
-    public ResponseEntity<?> detail(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
+    public ResponseEntity<?> detail(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id) {
         var contest = contests.findById(id).orElse(null);
-        if (contest == null) return ResponseEntity.notFound().build();
+        if (contest == null)
+            return ResponseEntity.notFound().build();
         if ((!contest.isPublic() || "DRAFT".equals(contest.getLifecycleState())) && !isManager(authorization)) {
             return ResponseEntity.notFound().build();
         }
@@ -126,21 +157,32 @@ public class ContestController {
      */
     @PutMapping("/{id}")
     @Transactional
-    public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id,
-                                    @RequestBody ContestRequest request) {
+    public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id,
+            @RequestBody
+            ContestRequest request) {
         requireManager(authorization);
-        var item = contests.findForUpdateById(id).orElse(null); if (item == null) return ResponseEntity.notFound().build();
+        var item = contests.findForUpdateById(id).orElse(null);
+        if (item == null)
+            return ResponseEntity.notFound().build();
         // 发布后修改规则会破坏快照/审计一致性，故只允许 HIDDEN_STATES 内修改
-        if (!HIDDEN_STATES.contains(item.getLifecycleState())) return ResponseEntity.status(409).body(Map.of("error", "比赛发布后不能直接修改规则或时间"));
+        if (!HIDDEN_STATES.contains(item.getLifecycleState()))
+            return ResponseEntity.status(409).body(Map.of("error", "比赛发布后不能直接修改规则或时间"));
         String type = request.contestType() == null ? null : normalizeType(request.contestType());
-        if (request.contestType() != null && type == null) return ResponseEntity.badRequest().body(Map.of("error", "比赛模式仅支持 ACM 或 OI"));
+        if (request.contestType() != null && type == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "比赛模式仅支持 ACM 或 OI"));
         LocalDateTime start = request.startTime() != null ? request.startTime() : item.getStartTime();
         LocalDateTime end = request.endTime() != null ? request.endTime() : item.getEndTime();
         LocalDateTime freeze = request.freezeTime() != null ? request.freezeTime() : item.getFreezeTime();
         String invalid = validateTimes(start, end, freeze);
-        if (invalid != null) return ResponseEntity.badRequest().body(Map.of("error", invalid));
-        item.updateConfig(request.title(), request.description(), type, request.startTime(), request.endTime(), request.freezeTime(),
-                request.freezeTime() != null || item.getFreezeTime() == null, request.penaltyTime(), inferStatus(start, end));
+        if (invalid != null)
+            return ResponseEntity.badRequest().body(Map.of("error", invalid));
+        item.updateConfig(request.title(), request.description(), type, request.startTime(), request.endTime(),
+                request.freezeTime(),
+                request.freezeTime() != null || item.getFreezeTime() == null, request.penaltyTime(),
+                inferStatus(start, end));
         return ResponseEntity.ok(view(contests.save(item)));
     }
 
@@ -151,10 +193,12 @@ public class ContestController {
      * @return 比赛视图列表
      */
     @GetMapping("/manage")
-    public ResponseEntity<?> manage(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public ResponseEntity<?> manage(@RequestHeader(value = "Authorization", required = false)
+    String authorization) {
         requireManager(authorization);
         return ResponseEntity.ok(contests.findAll().stream()
-                .sorted(java.util.Comparator.comparing(Contest::getStartTime, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .sorted(java.util.Comparator.comparing(Contest::getStartTime,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
                 .map(this::view).toList());
     }
 
@@ -168,9 +212,14 @@ public class ContestController {
      */
     @DeleteMapping("/{id}")
     @Transactional
-    public ResponseEntity<?> delete(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
+    public ResponseEntity<?> delete(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id) {
         requireManager(authorization);
-        var contest = contests.findForUpdateById(id).orElse(null); if (contest == null) return ResponseEntity.notFound().build();
+        var contest = contests.findForUpdateById(id).orElse(null);
+        if (contest == null)
+            return ResponseEntity.notFound().build();
         if (!"DRAFT".equals(contest.getLifecycleState())) {
             return ResponseEntity.status(409).body(Map.of("error", "已发布比赛必须保留审计记录；请取消比赛，不能删除"));
         }
@@ -198,20 +247,32 @@ public class ContestController {
      */
     @PostMapping("/{id}/publish")
     @Transactional
-    public ResponseEntity<?> publish(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
+    public ResponseEntity<?> publish(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id) {
         var user = requireManager(authorization);
-        var item = contests.findForUpdateById(id).orElse(null); if (item == null) return ResponseEntity.notFound().build();
-        if (!HIDDEN_STATES.contains(item.getLifecycleState())) return ResponseEntity.status(409).body(Map.of("error", "比赛已发布，不能再次发布"));
-        if (item.getStartTime() == null || item.getEndTime() == null) return ResponseEntity.badRequest().body(Map.of("error", "发布比赛必须设置开始和结束时间"));
+        var item = contests.findForUpdateById(id).orElse(null);
+        if (item == null)
+            return ResponseEntity.notFound().build();
+        if (!HIDDEN_STATES.contains(item.getLifecycleState()))
+            return ResponseEntity.status(409).body(Map.of("error", "比赛已发布，不能再次发布"));
+        if (item.getStartTime() == null || item.getEndTime() == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "发布比赛必须设置开始和结束时间"));
         var contestProblems = problems.findByContest_IdOrderBySortOrderAscIdAsc(id);
-        if (contestProblems.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "发布比赛至少需要一道题目"));
+        if (contestProblems.isEmpty())
+            return ResponseEntity.badRequest().body(Map.of("error", "发布比赛至少需要一道题目"));
         // 发布前逐题校验：参考答案必须验证通过，且必须包含隐藏测试点
         for (var problem : contestProblems) {
             if (!"VALID".equalsIgnoreCase(problem.getValidationStatus())) {
-                return ResponseEntity.status(409).body(Map.of("error", "题目 " + problem.getProblemIndex() + " 的参考答案尚未验证通过"));
+                return ResponseEntity.status(409)
+                        .body(Map.of("error", "题目 " + problem.getProblemIndex() + " 的参考答案尚未验证通过"));
             }
-            boolean hasHidden = testcases.findByContestProblem_IdOrderBySortOrderAscIdAsc(problem.getId()).stream().anyMatch(t -> !t.isSample());
-            if (!hasHidden) return ResponseEntity.badRequest().body(Map.of("error", "题目 " + problem.getProblemIndex() + " 缺少隐藏测试数据"));
+            boolean hasHidden = testcases.findByContestProblem_IdOrderBySortOrderAscIdAsc(problem.getId()).stream()
+                    .anyMatch(t -> !t.isSample());
+            if (!hasHidden)
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "题目 " + problem.getProblemIndex() + " 缺少隐藏测试数据"));
         }
         // 为每道题生成并绑定内容寻址题包摘要，保证发布内容可追溯
         for (var problem : contestProblems) {
@@ -233,10 +294,16 @@ public class ContestController {
      */
     @PostMapping("/{id}/cancel")
     @Transactional
-    public ResponseEntity<?> cancel(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
+    public ResponseEntity<?> cancel(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id) {
         requireManager(authorization);
-        var item = contests.findForUpdateById(id).orElse(null); if (item == null) return ResponseEntity.notFound().build();
-        if ("FINALIZED".equals(item.getLifecycleState())) return ResponseEntity.status(409).body(Map.of("error", "最终榜已结算，不能取消"));
+        var item = contests.findForUpdateById(id).orElse(null);
+        if (item == null)
+            return ResponseEntity.notFound().build();
+        if ("FINALIZED".equals(item.getLifecycleState()))
+            return ResponseEntity.status(409).body(Map.of("error", "最终榜已结算，不能取消"));
         item.cancel();
         return ResponseEntity.ok(view(contests.save(item)));
     }
@@ -251,9 +318,14 @@ public class ContestController {
      */
     @PostMapping("/{id}/join")
     @Transactional
-    public ResponseEntity<?> join(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
+    public ResponseEntity<?> join(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id) {
         var user = currentUser.require(authorization);
-        var contest = contests.findForUpdateById(id).orElse(null); if (contest == null) return ResponseEntity.notFound().build();
+        var contest = contests.findForUpdateById(id).orElse(null);
+        if (contest == null)
+            return ResponseEntity.notFound().build();
         if (participants.findByContest_IdAndUser_Id(id, user.getId()).isPresent()) {
             // 幂等：已报名直接返回成功
             return ResponseEntity.ok(Map.of("success", true, "already_joined", true));
@@ -279,7 +351,13 @@ public class ContestController {
      * @return 题面列表或 404
      */
     @GetMapping("/{id}/problems")
-    public ResponseEntity<?> problemList(@PathVariable Integer id) { if (!contests.existsById(id)) return ResponseEntity.notFound().build(); return ResponseEntity.ok(problems.findByContest_IdOrderBySortOrderAscIdAsc(id).stream().map(this::publicProblem).toList()); }
+    public ResponseEntity<?> problemList(@PathVariable
+    Integer id) {
+        if (!contests.existsById(id))
+            return ResponseEntity.notFound().build();
+        return ResponseEntity
+                .ok(problems.findByContest_IdOrderBySortOrderAscIdAsc(id).stream().map(this::publicProblem).toList());
+    }
 
     /**
      * 单题题面（限定比赛）：校验题目归属后返回参赛者视图。
@@ -289,7 +367,9 @@ public class ContestController {
      * @return 题面或 404
      */
     @GetMapping("/{id}/problems/{problemId}")
-    public ResponseEntity<?> problem(@PathVariable Integer id, @PathVariable Integer problemId) {
+    public ResponseEntity<?> problem(@PathVariable
+    Integer id, @PathVariable
+    Integer problemId) {
         return problems.findByIdAndContest_Id(problemId, id)
                 .<ResponseEntity<?>>map(item -> ResponseEntity.ok(publicProblem(item)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -302,7 +382,11 @@ public class ContestController {
      * @return 题面或 404
      */
     @GetMapping("/problems/{problemId}")
-    public ResponseEntity<?> problemGlobal(@PathVariable Integer problemId) { return problems.findById(problemId).<ResponseEntity<?>>map(p -> ResponseEntity.ok(publicProblem(p))).orElseGet(() -> ResponseEntity.notFound().build()); }
+    public ResponseEntity<?> problemGlobal(@PathVariable
+    Integer problemId) {
+        return problems.findById(problemId).<ResponseEntity<?>>map(p -> ResponseEntity.ok(publicProblem(p)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
 
     /** 参赛者题面：不返回参考答案、校验信息与题包摘要。 */
     private Map<String, Object> publicProblem(com.xauat.oj.core.contest.domain.ContestProblem problem) {
@@ -324,8 +408,11 @@ public class ContestController {
 
     private List<Map<String, Object>> parseSamples(String raw) {
         try {
-            if (raw == null || raw.isBlank()) return List.of();
-            return mapper.readValue(raw, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+            if (raw == null || raw.isBlank())
+                return List.of();
+            return mapper.readValue(raw,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {
+                    });
         } catch (Exception exception) {
             return List.of();
         }
@@ -344,24 +431,39 @@ public class ContestController {
      */
     @PostMapping("/{id}/problems/{problemId}/submit")
     @Transactional
-    public ResponseEntity<?> submit(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                    @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-                                    @PathVariable Integer id, @PathVariable Integer problemId, @Valid @RequestBody SubmitRequest request) {
+    public ResponseEntity<?> submit(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String idempotencyKey,
+            @PathVariable
+            Integer id, @PathVariable
+            Integer problemId, @Valid @RequestBody
+            SubmitRequest request) {
         var user = currentUser.require(authorization);
-        var contest = contests.findForUpdateById(id).orElse(null); if (contest == null) return ResponseEntity.notFound().build();
+        var contest = contests.findForUpdateById(id).orElse(null);
+        if (contest == null)
+            return ResponseEntity.notFound().build();
         // 阶段与时间双重校验，封榜阶段仍允许提交（但非裁判不可见）
-        if (!List.of("SCHEDULED", "RUNNING", "FROZEN").contains(contest.getLifecycleState())) return ResponseEntity.status(409).body(Map.of("error", "比赛当前不可提交"));
-        if (contest.getStartTime() != null && LocalDateTime.now().isBefore(contest.getStartTime())) return ResponseEntity.status(409).body(Map.of("error", "比赛尚未开始"));
-        if (contest.getEndTime() != null && !LocalDateTime.now().isBefore(contest.getEndTime())) return ResponseEntity.status(409).body(Map.of("error", "比赛已经结束"));
-        if (participants.findByContest_IdAndUser_Id(id, user.getId()).isEmpty()) return ResponseEntity.status(403).body(Map.of("error", "请先报名比赛"));
-        var problem = problems.findByIdAndContest_Id(problemId, id).orElse(null); if (problem == null) return ResponseEntity.notFound().build();
+        if (!List.of("SCHEDULED", "RUNNING", "FROZEN").contains(contest.getLifecycleState()))
+            return ResponseEntity.status(409).body(Map.of("error", "比赛当前不可提交"));
+        if (contest.getStartTime() != null && LocalDateTime.now().isBefore(contest.getStartTime()))
+            return ResponseEntity.status(409).body(Map.of("error", "比赛尚未开始"));
+        if (contest.getEndTime() != null && !LocalDateTime.now().isBefore(contest.getEndTime()))
+            return ResponseEntity.status(409).body(Map.of("error", "比赛已经结束"));
+        if (participants.findByContest_IdAndUser_Id(id, user.getId()).isEmpty())
+            return ResponseEntity.status(403).body(Map.of("error", "请先报名比赛"));
+        var problem = problems.findByIdAndContest_Id(problemId, id).orElse(null);
+        if (problem == null)
+            return ResponseEntity.notFound().build();
         // 幂等键命中已有提交时直接回放，避免重复判题
         if (idempotencyKey != null) {
             var replay = submissions.findByContest_IdAndUser_IdAndIdempotencyKey(id, user.getId(), idempotencyKey);
-            if (replay.isPresent()) return ResponseEntity.status(201).body(submissionView(replay.get(), true));
+            if (replay.isPresent())
+                return ResponseEntity.status(201).body(submissionView(replay.get(), true));
         }
         String jobId = UUID.randomUUID().toString();
-        var submission = submissions.save(com.xauat.oj.core.contest.domain.ContestSubmission.create(contest, user, problem, request.code(), request.language(), jobId, idempotencyKey));
+        var submission = submissions.save(com.xauat.oj.core.contest.domain.ContestSubmission.create(contest, user,
+                problem, request.code(), request.language(), jobId, idempotencyKey));
         // outbox 模式：与提交同事务落库，随后由 ContestOutboxDispatcher 异步投递判题队列
         outboxes.save(com.xauat.oj.core.contest.domain.ContestJudgeOutbox.of(submission));
         return ResponseEntity.status(201).body(submissionView(submission, false));
@@ -377,17 +479,26 @@ public class ContestController {
      * @return 提交视图或 404
      */
     @GetMapping("/{id}/problems/{problemId}/submission/{submissionId}")
-    public ResponseEntity<?> submission(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id,
-                                        @PathVariable Integer problemId, @PathVariable Integer submissionId) {
+    public ResponseEntity<?> submission(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id,
+            @PathVariable
+            Integer problemId, @PathVariable
+            Integer submissionId) {
         var user = currentUser.require(authorization);
         String key = "cache:contest_submission:" + submissionId;
         var cached = submissionCache.get(key);
-        if (cached.isPresent()) return ResponseEntity.ok(cached.get());
-        return submissions.findById(submissionId).filter(s -> id.equals(s.getContestId()) && user.getId().equals(s.getUserId()) && s.getRejudgeOfId() == null)
+        if (cached.isPresent())
+            return ResponseEntity.ok(cached.get());
+        return submissions.findById(submissionId).filter(
+                s -> id.equals(s.getContestId()) && user.getId().equals(s.getUserId()) && s.getRejudgeOfId() == null)
                 .<ResponseEntity<?>>map(s -> {
                     Map<String, Object> body = submissionView(s, false);
                     // 仅当状态不再变化（非进行中）时缓存，避免脏读
-                    if (!List.of("Pending", "Queued", "Judging", "Claimed", "Compiling", "Compiled", "Running", "Checking").contains(s.getStatus())) submissionCache.put(key, body);
+                    if (!List.of("Pending", "Queued", "Judging", "Claimed", "Compiling", "Compiled", "Running",
+                            "Checking").contains(s.getStatus()))
+                        submissionCache.put(key, body);
                     return ResponseEntity.ok(body);
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -401,8 +512,12 @@ public class ContestController {
      * @return 以题目序号为键的状态映射或 404
      */
     @GetMapping("/{id}/statuses")
-    public ResponseEntity<?> statuses(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
-        if (!contests.existsById(id)) return ResponseEntity.notFound().build();
+    public ResponseEntity<?> statuses(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id) {
+        if (!contests.existsById(id))
+            return ResponseEntity.notFound().build();
         var user = currentUser.require(authorization);
         // 将当前用户解析为 entry（队长），从而聚合整队提交
         Integer myEntry = entryResolver.entryUser(id, user.getId());
@@ -415,10 +530,13 @@ public class ContestController {
         java.util.LinkedHashMap<String, Boolean> anyAccepted = new java.util.LinkedHashMap<>();
         for (var s : items) {
             latest.putIfAbsent(s.getProblemIndex(), s.getStatus() == null ? "" : s.getStatus());
-            if ("AC".equalsIgnoreCase(s.getVerdict()) || "Accepted".equalsIgnoreCase(s.getVerdict()) || "AC".equalsIgnoreCase(s.getStatus())) anyAccepted.put(s.getProblemIndex(), true);
+            if ("AC".equalsIgnoreCase(s.getVerdict()) || "Accepted".equalsIgnoreCase(s.getVerdict())
+                    || "AC".equalsIgnoreCase(s.getStatus()))
+                anyAccepted.put(s.getProblemIndex(), true);
         }
         java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
-        latest.forEach((index, status) -> body.put(index, Map.of("status", status, "solved", anyAccepted.getOrDefault(index, false))));
+        latest.forEach((index, status) -> body.put(index,
+                Map.of("status", status, "solved", anyAccepted.getOrDefault(index, false))));
         return ResponseEntity.ok(body);
     }
 
@@ -432,49 +550,82 @@ public class ContestController {
      * @return 榜单快照响应、304 或 404
      */
     @GetMapping("/{id}/rankings")
-    public ResponseEntity<?> rankings(@RequestHeader(value="Authorization", required=false) String authorization, @PathVariable Integer id, @RequestHeader(value="If-None-Match", required=false) String ifNoneMatch) {
-        var contest = contests.findById(id).orElse(null); if (contest == null) return ResponseEntity.notFound().build();
-        boolean jury = false; var user = currentUser.optional(authorization);
-        if (user != null) jury = "manager".equals(user.getRole()) || "staff".equals(user.getRole());
+    public ResponseEntity<?> rankings(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id, @RequestHeader(value = "If-None-Match", required = false)
+            String ifNoneMatch) {
+        var contest = contests.findById(id).orElse(null);
+        if (contest == null)
+            return ResponseEntity.notFound().build();
+        boolean jury = false;
+        var user = currentUser.optional(authorization);
+        if (user != null)
+            jury = "manager".equals(user.getRole()) || "staff".equals(user.getRole());
         boolean participant = user != null && participants.findByContest_IdAndUser_Id(id, user.getId()).isPresent();
         // 可见性：裁判、参赛者，或已发布的公开比赛
-        boolean visible = jury || participant || (contest.isPublic() && !List.of("DRAFT", "READY", "CANCELLED").contains(contest.getLifecycleState()));
-        if (!visible) return ResponseEntity.notFound().build();
+        boolean visible = jury || participant || (contest.isPublic()
+                && !List.of("DRAFT", "READY", "CANCELLED").contains(contest.getLifecycleState()));
+        if (!visible)
+            return ResponseEntity.notFound().build();
         // 快照种类随身份变化：裁判看 LIVE，封榜后普通用户看 PUBLIC_FREEZE
         ContestScoreboardSnapshot snapshot = scoreboard.ensure(contest, scoreboard.kindFor(contest, jury));
         return snapshotResponse(snapshot, ifNoneMatch, scoreboard.bodyOf(snapshot));
     }
 
-    private ResponseEntity<?> snapshotResponse(ContestScoreboardSnapshot snapshot, String ifNoneMatch, Object body) { String etag = "\"" + sha256(snapshot.getPayload()) + "\""; if (etag.equals(ifNoneMatch)) return ResponseEntity.status(304).header(HttpHeaders.ETAG, etag).build(); return ResponseEntity.ok().header(HttpHeaders.ETAG, etag).header("X-Scoreboard-Version", String.valueOf(snapshot.getScoreboardVersion())).body(body); }
+    private ResponseEntity<?> snapshotResponse(ContestScoreboardSnapshot snapshot, String ifNoneMatch, Object body) {
+        String etag = "\"" + sha256(snapshot.getPayload()) + "\"";
+        if (etag.equals(ifNoneMatch))
+            return ResponseEntity.status(304).header(HttpHeaders.ETAG, etag).build();
+        return ResponseEntity.ok().header(HttpHeaders.ETAG, etag)
+                .header("X-Scoreboard-Version", String.valueOf(snapshot.getScoreboardVersion())).body(body);
+    }
 
-    private static String sha256(String value) { try { return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); } catch (Exception e) { throw new IllegalStateException(e); } }
+    private static String sha256(String value) {
+        try {
+            return java.util.HexFormat.of()
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     private String statusOf(Contest contest) {
         String lifecycle = contest.getLifecycleState();
-        if ("FINALIZED".equals(lifecycle) || "CANCELLED".equals(lifecycle)) return "past";
-        if ("DRAFT".equals(lifecycle) || "READY".equals(lifecycle)) return "upcoming";
+        if ("FINALIZED".equals(lifecycle) || "CANCELLED".equals(lifecycle))
+            return "past";
+        if ("DRAFT".equals(lifecycle) || "READY".equals(lifecycle))
+            return "upcoming";
         LocalDateTime now = LocalDateTime.now();
-        if (contest.getStartTime() != null && now.isBefore(contest.getStartTime())) return "upcoming";
-        if (contest.getEndTime() != null && !now.isBefore(contest.getEndTime())) return "past";
+        if (contest.getStartTime() != null && now.isBefore(contest.getStartTime()))
+            return "upcoming";
+        if (contest.getEndTime() != null && !now.isBefore(contest.getEndTime()))
+            return "past";
         return "ongoing";
     }
 
     private boolean isFrozen(Contest contest) {
-        if (contest.getFreezeTime() == null || contest.getThawedAt() != null) return false;
-        if (List.of("DRAFT", "READY", "CANCELLED").contains(contest.getLifecycleState())) return false;
+        if (contest.getFreezeTime() == null || contest.getThawedAt() != null)
+            return false;
+        if (List.of("DRAFT", "READY", "CANCELLED").contains(contest.getLifecycleState()))
+            return false;
         return !LocalDateTime.now().isBefore(contest.getFreezeTime());
     }
 
     private String inferStatus(LocalDateTime start, LocalDateTime end) {
-        if (start == null || end == null) return "upcoming";
+        if (start == null || end == null)
+            return "upcoming";
         LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(start)) return "upcoming";
-        if (now.isAfter(end)) return "past";
+        if (now.isBefore(start))
+            return "upcoming";
+        if (now.isAfter(end))
+            return "past";
         return "ongoing";
     }
 
     private String validateTimes(LocalDateTime start, LocalDateTime end, LocalDateTime freeze) {
-        if (start != null && end != null && !end.isAfter(start)) return "结束时间必须晚于开始时间";
+        if (start != null && end != null && !end.isAfter(start))
+            return "结束时间必须晚于开始时间";
         if (freeze != null && (start == null || end == null || !freeze.isAfter(start) || !freeze.isBefore(end))) {
             return "封榜时间必须位于开始与结束时间之间";
         }
@@ -482,7 +633,8 @@ public class ContestController {
     }
 
     private String normalizeType(String type) {
-        if (type == null || type.isBlank()) return "ACM";
+        if (type == null || type.isBlank())
+            return "ACM";
         String upper = type.toUpperCase(java.util.Locale.ROOT);
         return List.of("ACM", "OI").contains(upper) ? upper : null;
     }
@@ -494,7 +646,8 @@ public class ContestController {
 
     private com.xauat.oj.core.user.domain.User requireManager(String authorization) {
         var user = currentUser.require(authorization);
-        if (!"manager".equals(user.getRole())) throw new com.xauat.oj.common.exception.OjException("FORBIDDEN", "权限不足");
+        if (!"manager".equals(user.getRole()))
+            throw new com.xauat.oj.common.exception.OjException("FORBIDDEN", "权限不足");
         return user;
     }
 
@@ -517,7 +670,8 @@ public class ContestController {
         return body;
     }
 
-    private Map<String, Object> submissionView(com.xauat.oj.core.contest.domain.ContestSubmission item, boolean replay) {
+    private Map<String, Object> submissionView(com.xauat.oj.core.contest.domain.ContestSubmission item,
+            boolean replay) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", item.getId());
         body.put("contest_id", item.getContestId());
@@ -530,14 +684,25 @@ public class ContestController {
     }
 
     /** 创建/更新比赛的请求体，字段与 JSON 名称通过注解映射。 */
-    public record ContestRequest(@NotBlank @jakarta.validation.constraints.Size(max = 200) String title,
-                                 @NotBlank @jakarta.validation.constraints.Size(max = 131072) String description,
-                                 @JsonProperty("contest_type") @JsonAlias("contestType") String contestType,
-                                 @JsonProperty("start_time") @JsonAlias("startTime") LocalDateTime startTime,
-                                 @JsonProperty("end_time") @JsonAlias("endTime") LocalDateTime endTime,
-                                 @JsonProperty("freeze_time") @JsonAlias("freezeTime") LocalDateTime freezeTime,
-                                 @JsonProperty("penalty_time") @JsonAlias("penaltyTime") Integer penaltyTime) {}
+    public record ContestRequest(@NotBlank @jakarta.validation.constraints.Size(max = 200)
+    String title,
+            @NotBlank @jakarta.validation.constraints.Size(max = 131072)
+            String description,
+            @JsonProperty("contest_type") @JsonAlias("contestType")
+            String contestType,
+            @JsonProperty("start_time") @JsonAlias("startTime")
+            LocalDateTime startTime,
+            @JsonProperty("end_time") @JsonAlias("endTime")
+            LocalDateTime endTime,
+            @JsonProperty("freeze_time") @JsonAlias("freezeTime")
+            LocalDateTime freezeTime,
+            @JsonProperty("penalty_time") @JsonAlias("penaltyTime")
+            Integer penaltyTime) {
+    }
     /** 提交请求体：源码与语言。 */
-    public record SubmitRequest(@NotBlank @jakarta.validation.constraints.Size(max = 131072) String code,
-                                @NotBlank @jakarta.validation.constraints.Size(max = 50) String language) {}
+    public record SubmitRequest(@NotBlank @jakarta.validation.constraints.Size(max = 131072)
+    String code,
+            @NotBlank @jakarta.validation.constraints.Size(max = 50)
+            String language) {
+    }
 }

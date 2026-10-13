@@ -44,8 +44,10 @@ public abstract class BaseEntity {
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();
-        if (createdAt == null) createdAt = now;
-        if (updatedAt == null) updatedAt = now;
+        if (createdAt == null)
+            createdAt = now;
+        if (updatedAt == null)
+            updatedAt = now;
     }
 
     /** 更新前回调：将最后更新时间刷新为当前时间。 */
@@ -54,7 +56,13 @@ public abstract class BaseEntity {
         updatedAt = LocalDateTime.now();
     }
 
-    public Integer getId() { return id; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public Integer getId() {
+        return id;
+    }
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
 }

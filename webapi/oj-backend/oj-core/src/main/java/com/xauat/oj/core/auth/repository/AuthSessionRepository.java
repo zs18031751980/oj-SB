@@ -25,7 +25,8 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, String
      * @return 匹配的未撤销会话，未找到时返回空 {@code Optional}
      */
     @Query("select s from AuthSession s where s.revoked = false and (s.refreshHash = :hash or s.previousRefreshHash = :hash)")
-    Optional<AuthSession> findByRefreshHashAndRevokedFalse(@Param("hash") String refreshHash);
+    Optional<AuthSession> findByRefreshHashAndRevokedFalse(@Param("hash")
+    String refreshHash);
 
     /**
      * 根据会话 ID 查询未撤销的会话。
@@ -45,7 +46,8 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, String
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from AuthSession s where s.id = :id")
-    Optional<AuthSession> findForUpdateById(@Param("id") String id);
+    Optional<AuthSession> findForUpdateById(@Param("id")
+    String id);
 
     /**
      * 撤销指定用户的全部会话。
@@ -55,5 +57,6 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, String
      */
     @Modifying
     @Query("update AuthSession s set s.revoked = true where s.user.id = :userId")
-    int revokeByUserId(@Param("userId") Integer userId);
+    int revokeByUserId(@Param("userId")
+    Integer userId);
 }

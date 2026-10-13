@@ -25,7 +25,8 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
      * @throws IOException      IO 异常
      */
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
         // 仅拦截会改变状态的写操作；GET 等安全方法无需该头
         if (request.getRequestURI().startsWith("/auth/") && !"GET".equalsIgnoreCase(request.getMethod()) &&
                 !"1".equals(request.getHeader("X-CSRF-Protection"))) {

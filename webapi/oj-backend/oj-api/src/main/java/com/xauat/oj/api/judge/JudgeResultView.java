@@ -17,7 +17,9 @@ import java.util.Map;
 public class JudgeResultView {
     private final ObjectMapper mapper;
 
-    public JudgeResultView(ObjectMapper mapper) { this.mapper = mapper; }
+    public JudgeResultView(ObjectMapper mapper) {
+        this.mapper = mapper;
+    }
 
     /**
      * 解析数据库中保存的判题明细 JSON。
@@ -26,11 +28,14 @@ public class JudgeResultView {
      * @return 规范化后的逐用例结果列表；解析失败返回空列表
      */
     public List<Map<String, Object>> parse(String payload) {
-        if (payload == null || payload.isBlank()) return List.of();
+        if (payload == null || payload.isBlank())
+            return List.of();
         try {
-            List<Map<String, Object>> raw = mapper.readValue(payload, new TypeReference<List<Map<String, Object>>>() {});
+            List<Map<String, Object>> raw = mapper.readValue(payload, new TypeReference<List<Map<String, Object>>>() {
+            });
             List<Map<String, Object>> result = new ArrayList<>();
-            for (int i = 0; i < raw.size(); i++) result.add(item(raw.get(i), i));
+            for (int i = 0; i < raw.size(); i++)
+                result.add(item(raw.get(i), i));
             return result;
         } catch (Exception exception) {
             return List.of();
@@ -45,7 +50,8 @@ public class JudgeResultView {
      */
     public Integer failIndex(List<Map<String, Object>> results) {
         for (Map<String, Object> item : results) {
-            if (!Boolean.TRUE.equals(item.get("passed"))) return (Integer) item.get("testCaseIndex");
+            if (!Boolean.TRUE.equals(item.get("passed")))
+                return (Integer) item.get("testCaseIndex");
         }
         return null;
     }
@@ -57,10 +63,12 @@ public class JudgeResultView {
      * @return 编译失败提示文案，否则 {@code null}
      */
     public String compileError(String status) {
-        if (status == null) return null;
+        if (status == null)
+            return null;
         // 兼容 "CE" 与各种含 "compil" 的状态描述。
         String normalized = status.replace(" ", "").toLowerCase();
-        if (normalized.equals("ce") || normalized.contains("compil")) return "编译失败，请检查代码";
+        if (normalized.equals("ce") || normalized.contains("compil"))
+            return "编译失败，请检查代码";
         return null;
     }
 
@@ -72,7 +80,8 @@ public class JudgeResultView {
         String input = firstString(raw, "stdin", "input");
         String expected = firstString(raw, "expected_output", "expected");
         Map<String, Object> item = new LinkedHashMap<>();
-        item.put("testCaseIndex", raw.get("testCaseIndex") != null ? raw.get("testCaseIndex") : raw.getOrDefault("index", index));
+        item.put("testCaseIndex",
+                raw.get("testCaseIndex") != null ? raw.get("testCaseIndex") : raw.getOrDefault("index", index));
         item.put("passed", passed(raw));
         item.put("stdout", stdout);
         item.put("stderr", stderr);
@@ -85,14 +94,17 @@ public class JudgeResultView {
     /** 判断单条结果是否通过：兼容布尔 passed、Judge0 status.id==3 与文本状态。 */
     private boolean passed(Map<String, Object> raw) {
         Object passed = raw.get("passed");
-        if (passed instanceof Boolean value) return value;
+        if (passed instanceof Boolean value)
+            return value;
         Object status = raw.get("status");
         if (status instanceof Map<?, ?> map) {
             Object id = map.get("id");
             Object description = map.get("description");
             // Judge0 约定 status.id == 3 表示 Accepted。
-            if (id instanceof Number number) return number.intValue() == 3;
-            if (description != null) return "accepted".equalsIgnoreCase(String.valueOf(description));
+            if (id instanceof Number number)
+                return number.intValue() == 3;
+            if (description != null)
+                return "accepted".equalsIgnoreCase(String.valueOf(description));
         }
         if (status != null) {
             String text = String.valueOf(status).replace(" ", "").toLowerCase();
@@ -105,7 +117,8 @@ public class JudgeResultView {
     private String firstString(Map<String, Object> raw, String... keys) {
         for (String key : keys) {
             Object value = raw.get(key);
-            if (value instanceof String text && !text.isBlank()) return text;
+            if (value instanceof String text && !text.isBlank())
+                return text;
         }
         return "";
     }

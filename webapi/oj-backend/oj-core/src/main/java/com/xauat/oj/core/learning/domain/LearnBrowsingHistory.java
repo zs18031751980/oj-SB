@@ -30,11 +30,22 @@ public class LearnBrowsingHistory extends BaseEntity {
     @Column(name = "browsed_at", nullable = false)
     private LocalDateTime browsedAt;
 
-    protected LearnBrowsingHistory() {}
+    protected LearnBrowsingHistory() {
+    }
     /** 构建一条浏览记录并记录当前时间。 */
-    public static LearnBrowsingHistory of(User user, String resourceId) { LearnBrowsingHistory history = new LearnBrowsingHistory(); history.user = user; history.resourceId = resourceId; history.browsedAt = LocalDateTime.now(); return history; }
+    public static LearnBrowsingHistory of(User user, String resourceId) {
+        LearnBrowsingHistory history = new LearnBrowsingHistory();
+        history.user = user;
+        history.resourceId = resourceId;
+        history.browsedAt = LocalDateTime.now();
+        return history;
+    }
     /** 返回资源标识。 */
-    public String getResourceId() { return resourceId; }
+    public String getResourceId() {
+        return resourceId;
+    }
     /** 返回浏览时间。 */
-    public LocalDateTime getBrowsedAt() { return browsedAt; }
+    public LocalDateTime getBrowsedAt() {
+        return browsedAt;
+    }
 }

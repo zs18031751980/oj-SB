@@ -14,7 +14,9 @@ public class MetricsAuthFilter extends OncePerRequestFilter {
     private final String token;
 
     /** @param token 期望的指标访问令牌，空字符串表示不启用认证（开发环境）。 */
-    public MetricsAuthFilter(String token) { this.token = token == null ? "" : token.trim(); }
+    public MetricsAuthFilter(String token) {
+        this.token = token == null ? "" : token.trim();
+    }
 
     /**
      * 校验 {@code Authorization: Bearer &lt;token&gt;}。
@@ -29,7 +31,10 @@ public class MetricsAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         // 未配置令牌视为开发环境，直接放行
-        if (token.isBlank()) { chain.doFilter(request, response); return; }
+        if (token.isBlank()) {
+            chain.doFilter(request, response);
+            return;
+        }
         String header = request.getHeader("Authorization");
         String expected = "Bearer " + token;
         // 恒定时间比较，避免通过响应时间逐字节推断令牌

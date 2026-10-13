@@ -14,34 +14,65 @@ import jakarta.persistence.*;
 @Table(name = "contest_clarifications")
 public class ContestClarification extends BaseEntity {
     /** 所属比赛。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "contest_id") private Contest contest;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "contest_id")
+    private Contest contest;
     /** 提问者。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "author_id") private User author;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "author_id")
+    private User author;
     /** 提问内容。 */
-    @Column(nullable = false, columnDefinition = "text") private String question;
+    @Column(nullable = false, columnDefinition = "text")
+    private String question;
     /** 裁判回复内容；未回复时为 null。 */
-    @Column(columnDefinition = "text") private String answer;
+    @Column(columnDefinition = "text")
+    private String answer;
     /** 认领该问题的裁判用户 ID。 */
-    @Column(name = "claimed_by") private Integer claimedBy;
+    @Column(name = "claimed_by")
+    private Integer claimedBy;
     /** 实际作答的裁判用户 ID。 */
-    @Column(name = "answered_by") private Integer answeredBy;
+    @Column(name = "answered_by")
+    private Integer answeredBy;
     /** 答案是否广播给全体参赛者。 */
     private boolean broadcast;
-    protected ContestClarification() {}
+    protected ContestClarification() {
+    }
     /** 参赛者发起提问。 */
-    public static ContestClarification ask(Contest contest, User author, String question) { ContestClarification item = new ContestClarification(); item.contest = contest; item.author = author; item.question = question; return item; }
+    public static ContestClarification ask(Contest contest, User author, String question) {
+        ContestClarification item = new ContestClarification();
+        item.contest = contest;
+        item.author = author;
+        item.question = question;
+        return item;
+    }
     /** 返回所属比赛 ID。 */
-    public Integer getContestId() { return contest.getId(); }
+    public Integer getContestId() {
+        return contest.getId();
+    }
     /** 返回主键 ID。 */
-    public Integer getId() { return super.getId(); }
+    public Integer getId() {
+        return super.getId();
+    }
     /** 返回提问内容。 */
-    public String getQuestion() { return question; }
+    public String getQuestion() {
+        return question;
+    }
     /** 返回回复内容。 */
-    public String getAnswer() { return answer; }
+    public String getAnswer() {
+        return answer;
+    }
     /** 返回认领人用户 ID。 */
-    public Integer getClaimedBy() { return claimedBy; }
+    public Integer getClaimedBy() {
+        return claimedBy;
+    }
     /** 认领该澄清问题。 */
-    public void setClaimedBy(Integer userId) { this.claimedBy = userId; }
+    public void setClaimedBy(Integer userId) {
+        this.claimedBy = userId;
+    }
     /** 裁判作答，记录作答人并设置是否广播。 */
-    public void answer(Integer userId, String value, boolean broadcast) { this.answer = value; this.answeredBy = userId; this.broadcast = broadcast; }
+    public void answer(Integer userId, String value, boolean broadcast) {
+        this.answer = value;
+        this.answeredBy = userId;
+        this.broadcast = broadcast;
+    }
 }

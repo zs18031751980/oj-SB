@@ -33,7 +33,8 @@ public interface ContestJudgeOutboxRepository extends JpaRepository<ContestJudge
      */
     @Modifying
     @Query("delete from ContestJudgeOutbox o where o.submission.contestProblem.id = :problemId")
-    int deleteByProblemId(@Param("problemId") Integer problemId);
+    int deleteByProblemId(@Param("problemId")
+    Integer problemId);
 
     /**
      * 删除指定赛事相关的全部下发消息。
@@ -43,7 +44,8 @@ public interface ContestJudgeOutboxRepository extends JpaRepository<ContestJudge
      */
     @Modifying
     @Query("delete from ContestJudgeOutbox o where o.submission.contest.id = :contestId")
-    int deleteByContestId(@Param("contestId") Integer contestId);
+    int deleteByContestId(@Param("contestId")
+    Integer contestId);
 
     /**
      * 统计指定状态的下发消息数量。
@@ -65,7 +67,10 @@ public interface ContestJudgeOutboxRepository extends JpaRepository<ContestJudge
     @Modifying
     @Query("delete from ContestJudgeOutbox o where o.state = 'DISPATCHED' and o.updatedAt < :cutoff "
             + "and o.submission.rejudgeOf is null and o.submission.status in :statuses")
-    int deleteDispatchedFinalBefore(@Param("cutoff") java.time.LocalDateTime cutoff, @Param("statuses") java.util.Collection<String> statuses);
+    int deleteDispatchedFinalBefore(@Param("cutoff")
+    java.time.LocalDateTime cutoff,
+            @Param("statuses")
+            java.util.Collection<String> statuses);
 
     /**
      * 查询当前最早的待处理消息创建时间，用于监控下发积压。

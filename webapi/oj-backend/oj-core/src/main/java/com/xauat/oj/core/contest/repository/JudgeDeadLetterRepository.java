@@ -29,5 +29,6 @@ public interface JudgeDeadLetterRepository extends JpaRepository<JudgeDeadLetter
      */
     @Modifying
     @Query("delete from JudgeDeadLetter d where d.resolvedAt is not null and d.resolvedAt < :cutoff")
-    int deleteResolvedBefore(@Param("cutoff") LocalDateTime cutoff);
+    int deleteResolvedBefore(@Param("cutoff")
+    LocalDateTime cutoff);
 }

@@ -38,5 +38,6 @@ public interface ContestProblemRepository extends JpaRepository<ContestProblem, 
      */
     @Modifying
     @Query("delete from ContestProblem p where p.contest.id = :contestId")
-    int deleteByContestId(@Param("contestId") Integer contestId);
+    int deleteByContestId(@Param("contestId")
+    Integer contestId);
 }

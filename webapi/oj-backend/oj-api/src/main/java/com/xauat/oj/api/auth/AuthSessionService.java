@@ -37,8 +37,10 @@ public class AuthSessionService {
      * @param cookieSecure      是否给刷新 Cookie 加 Secure 标记（生产 HTTPS 环境应开启）
      */
     public AuthSessionService(AuthSessionRepository sessions, JwtService jwt, RefreshRecoveryCipher cipher,
-                              @Value("${oj.auth.refresh-ttl-seconds:604800}") long refreshTtlSeconds,
-                              @Value("${oj.auth.cookie-secure:false}") boolean cookieSecure) {
+            @Value("${oj.auth.refresh-ttl-seconds:604800}")
+            long refreshTtlSeconds,
+            @Value("${oj.auth.cookie-secure:false}")
+            boolean cookieSecure) {
         this.sessions = sessions;
         this.jwt = jwt;
         this.cipher = cipher;
@@ -53,7 +55,8 @@ public class AuthSessionService {
      * @param refreshToken 刷新令牌
      * @param expiresIn    访问令牌剩余有效秒数
      */
-    public record IssuedTokens(String accessToken, String refreshToken, long expiresIn) {}
+    public record IssuedTokens(String accessToken, String refreshToken, long expiresIn) {
+    }
 
     /**
      * 为指定用户新建服务端会话，并同步签发访问令牌与刷新令牌。
@@ -85,7 +88,8 @@ public class AuthSessionService {
     public IssuedTokens rotate(AuthSession session, String requestId) {
         String sid = session.getId();
         Instant expiresAt = Instant.now().plusSeconds(refreshTtlSeconds);
-        String access = jwt.issueAccessToken(session.getUser().getId(), sid, session.getUser().getUsername(), session.getUser().getRole());
+        String access = jwt.issueAccessToken(session.getUser().getId(), sid, session.getUser().getUsername(),
+                session.getUser().getRole());
         String refresh = jwt.issueRefreshToken(session.getUser().getId(), sid, expiresAt);
         // 把本次结果加密暂存，供 30 秒内相同 Idempotency-Key 的重试原样返回
         String recovery = cipher.encrypt(access + "\n" + refresh + "\n" + jwt.accessTtlSeconds());
@@ -105,12 +109,15 @@ public class AuthSessionService {
      */
     public Optional<IssuedTokens> recover(AuthSession session, String tokenDigest, String requestId) {
         // 幂等键必须一致且在恢复时限内，否则视为常规（可能非法的）刷新
-        if (requestId == null || requestId.isBlank() || !requestId.equals(session.getRefreshRequestId())) return Optional.empty();
-        if (session.getRefreshRetryUntil() == null || !session.getRefreshRetryUntil().isAfter(LocalDateTime.now())) return Optional.empty();
+        if (requestId == null || requestId.isBlank() || !requestId.equals(session.getRefreshRequestId()))
+            return Optional.empty();
+        if (session.getRefreshRetryUntil() == null || !session.getRefreshRetryUntil().isAfter(LocalDateTime.now()))
+            return Optional.empty();
         // 允许当前或上一版刷新摘要，覆盖轮换前后两种重试时机
         boolean digestMatches = tokenDigest.equals(session.getRefreshHash())
                 || (session.getPreviousRefreshHash() != null && tokenDigest.equals(session.getPreviousRefreshHash()));
-        if (!digestMatches || session.getRefreshRetryCiphertext() == null) return Optional.empty();
+        if (!digestMatches || session.getRefreshRetryCiphertext() == null)
+            return Optional.empty();
         String[] parts = cipher.decrypt(session.getRefreshRetryCiphertext()).split("\n", 3);
         return Optional.of(new IssuedTokens(parts[0], parts[1], Long.parseLong(parts[2])));
     }
@@ -168,7 +175,9 @@ public class AuthSessionService {
     }
 
     /** @return 刷新 Cookie 是否启用 Secure 标记。 */
-    public boolean secureCookie() { return cookieSecure; }
+    public boolean secureCookie() {
+        return cookieSecure;
+    }
 
     /**
      * 归一化用户角色为小写，空角色回退为 member。
@@ -176,5 +185,7 @@ public class AuthSessionService {
      * @param user 用户实体
      * @return 小写角色名
      */
-    public String roleOf(User user) { return user.getRole() == null ? "member" : user.getRole().toLowerCase(Locale.ROOT); }
+    public String roleOf(User user) {
+        return user.getRole() == null ? "member" : user.getRole().toLowerCase(Locale.ROOT);
+    }
 }

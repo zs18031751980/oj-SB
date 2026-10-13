@@ -38,16 +38,50 @@ public class Announcement extends BaseEntity {
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 
-    protected Announcement() {}
-    public Integer getId() { return super.getId(); }
-    public String getTitle() { return title; }
-    public String getContent() { return content; }
-    public String getCategory() { return category; }
-    public String getPermission() { return permission; }
-    public boolean isPublished() { return published; }
-    public LocalDateTime getPublishedAt() { return publishedAt; }
+    protected Announcement() {
+    }
+    public Integer getId() {
+        return super.getId();
+    }
+    public String getTitle() {
+        return title;
+    }
+    public String getContent() {
+        return content;
+    }
+    public String getCategory() {
+        return category;
+    }
+    public String getPermission() {
+        return permission;
+    }
+    public boolean isPublished() {
+        return published;
+    }
+    public LocalDateTime getPublishedAt() {
+        return publishedAt;
+    }
     /** 创建公告；若直接发布则同时写入发布时间。 */
-    public static Announcement create(String title, String content, String category, String permission, String createdBy, boolean published) { Announcement item = new Announcement(); item.title = title; item.content = content; item.category = category; item.permission = permission; item.createdBy = createdBy; item.published = published; item.publishedAt = published ? LocalDateTime.now() : null; return item; }
+    public static Announcement create(String title, String content, String category, String permission,
+            String createdBy, boolean published) {
+        Announcement item = new Announcement();
+        item.title = title;
+        item.content = content;
+        item.category = category;
+        item.permission = permission;
+        item.createdBy = createdBy;
+        item.published = published;
+        item.publishedAt = published ? LocalDateTime.now() : null;
+        return item;
+    }
     /** 更新公告内容；首次发布时补充发布时间（已有发布时间则保留）。 */
-    public void update(String title, String content, String category, String permission, boolean published) { this.title = title; this.content = content; this.category = category; this.permission = permission; this.published = published; if (published && publishedAt == null) publishedAt = LocalDateTime.now(); }
+    public void update(String title, String content, String category, String permission, boolean published) {
+        this.title = title;
+        this.content = content;
+        this.category = category;
+        this.permission = permission;
+        this.published = published;
+        if (published && publishedAt == null)
+            publishedAt = LocalDateTime.now();
+    }
 }

@@ -24,5 +24,6 @@ public interface ContestRepository extends JpaRepository<Contest, Integer> {
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from Contest c where c.id = :id")
-    Optional<Contest> findForUpdateById(@Param("id") Integer id);
+    Optional<Contest> findForUpdateById(@Param("id")
+    Integer id);
 }

@@ -45,10 +45,13 @@ public class ProblemController {
     private final JudgeResultView judgeResultView;
 
     public ProblemController(ProblemCatalogService catalog, CurrentUser currentUser,
-                             ContestRepository contests, ContestSubmissionRepository submissions,
-                             ContestJudgeOutboxRepository outboxes, JudgeResultView judgeResultView) {
-        this.catalog = catalog; this.currentUser = currentUser;
-        this.contests = contests; this.submissions = submissions; this.outboxes = outboxes;
+            ContestRepository contests, ContestSubmissionRepository submissions,
+            ContestJudgeOutboxRepository outboxes, JudgeResultView judgeResultView) {
+        this.catalog = catalog;
+        this.currentUser = currentUser;
+        this.contests = contests;
+        this.submissions = submissions;
+        this.outboxes = outboxes;
         this.judgeResultView = judgeResultView;
     }
 
@@ -70,7 +73,8 @@ public class ProblemController {
      * @return 题目详情；不存在返回 404
      */
     @GetMapping("/{id}")
-    public ResponseEntity<?> detail(@PathVariable Integer id) {
+    public ResponseEntity<?> detail(@PathVariable
+    Integer id) {
         return catalog.detail(id).<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -89,40 +93,52 @@ public class ProblemController {
      */
     @PostMapping("/library/submit")
     @Transactional
-    public ResponseEntity<?> librarySubmit(@RequestHeader(value = "Authorization", required = false) String auth,
-                                           @RequestHeader(value = "Idempotency-Key", required = false) String key,
-                                           @Valid @RequestBody LibraryRequest request) {
+    public ResponseEntity<?> librarySubmit(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String key,
+            @Valid @RequestBody
+            LibraryRequest request) {
         var user = currentUser.require(auth);
-        if (key != null && key.length() > 128) return ResponseEntity.badRequest().body(Map.of("error", "幂等键过长"));
+        if (key != null && key.length() > 128)
+            return ResponseEntity.badRequest().body(Map.of("error", "幂等键过长"));
         // 只允许提交已结束比赛释放到题库的题目。
         ContestProblem problem = catalog.findLibraryProblem(request.contestProblemId()).orElse(null);
-        if (problem == null) return ResponseEntity.notFound().build();
+        if (problem == null)
+            return ResponseEntity.notFound().build();
         Contest contest = contests.findById(problem.getContestId()).orElse(null);
-        if (contest == null) return ResponseEntity.notFound().build();
+        if (contest == null)
+            return ResponseEntity.notFound().build();
         String normalizedKey = key == null ? null : "library:" + sha256(key);
         if (normalizedKey != null) {
             // 命中幂等键：校验载荷一致则直接回放，否则视为键复用冲突。
-            var replay = submissions.findByContest_IdAndUser_IdAndIdempotencyKey(contest.getId(), user.getId(), normalizedKey);
+            var replay = submissions.findByContest_IdAndUser_IdAndIdempotencyKey(contest.getId(), user.getId(),
+                    normalizedKey);
             if (replay.isPresent()) {
                 ContestSubmission existing = replay.get();
-                if (!existing.getCode().equals(request.code()) || !existing.getLanguage().equalsIgnoreCase(request.language())
+                if (!existing.getCode().equals(request.code())
+                        || !existing.getLanguage().equalsIgnoreCase(request.language())
                         || !problem.getId().equals(existing.getContestProblemId())) {
                     return ResponseEntity.status(409).body(Map.of("error", "幂等键已用于不同提交"));
                 }
-                return ResponseEntity.status(202).body(Map.of("submission_id", existing.getId(), "status", existing.getStatus(), "idempotent_replay", true));
+                return ResponseEntity.status(202).body(Map.of("submission_id", existing.getId(), "status",
+                        existing.getStatus(), "idempotent_replay", true));
             }
         }
         // 并发提交限制：未处于终态的库内提交（非重测）最多 3 个。
-        if (submissions.countByUser_IdAndContestEligibleFalseAndRejudgeOfIsNullAndStatusNotIn(user.getId(), TERMINAL_STATES) >= 3) {
+        if (submissions.countByUser_IdAndContestEligibleFalseAndRejudgeOfIsNullAndStatusNotIn(user.getId(),
+                TERMINAL_STATES) >= 3) {
             return ResponseEntity.status(429).body(Map.of("error", "最多同时处理 3 个比赛题目提交"));
         }
-        ContestSubmission submission = ContestSubmission.create(contest, user, problem, request.code(), request.language(), UUID.randomUUID().toString(), normalizedKey);
+        ContestSubmission submission = ContestSubmission.create(contest, user, problem, request.code(),
+                request.language(), UUID.randomUUID().toString(), normalizedKey);
         // 标记为练习提交，不参与比赛榜单/计分。
         submission.asPractice();
         submissions.save(submission);
         // 写 outbox，保证 DB 提交后再异步投递判题任务。
         outboxes.save(ContestJudgeOutbox.of(submission));
-        return ResponseEntity.status(202).body(Map.of("submission_id", submission.getId(), "status", submission.getStatus(), "queue_pending_retry", false));
+        return ResponseEntity.status(202).body(Map.of("submission_id", submission.getId(), "status",
+                submission.getStatus(), "queue_pending_retry", false));
     }
 
     /**
@@ -135,12 +151,16 @@ public class ProblemController {
      * @return 判题结果；不存在或无权返回 404
      */
     @GetMapping("/library/submission/{id}")
-    public ResponseEntity<?> librarySubmission(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id) {
+    public ResponseEntity<?> librarySubmission(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @PathVariable
+            Integer id) {
         var user = currentUser.require(auth);
         ContestSubmission submission = submissions.findById(id).filter(item -> !item.isContestEligible()
                 && item.getRejudgeOfId() == null
                 && (user.getId().equals(item.getUserId()) || "manager".equalsIgnoreCase(user.getRole()))).orElse(null);
-        if (submission == null) return ResponseEntity.notFound().build();
+        if (submission == null)
+            return ResponseEntity.notFound().build();
         // 隐藏测试数据：不向参赛者回传输入、期望输出与实际输出。
         List<Map<String, Object>> cases = judgeResultView.parse(submission.getTestcaseResults()).stream().map(item -> {
             Map<String, Object> safe = new LinkedHashMap<>();
@@ -170,11 +190,20 @@ public class ProblemController {
 
     /** 计算 SHA-256 十六进制摘要，用于幂等键归一化。 */
     private static String sha256(String value) {
-        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
-        catch (Exception exception) { throw new IllegalStateException(exception); }
+        try {
+            return HexFormat.of()
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     /** 库内提交请求体：比赛题目 id、代码与语言。 */
-    public record LibraryRequest(@com.fasterxml.jackson.annotation.JsonProperty("contest_problem_id") Integer contestProblemId,
-                                 @NotBlank String code, @NotBlank String language) {}
+    public record LibraryRequest(
+            @com.fasterxml.jackson.annotation.JsonProperty("contest_problem_id")
+            Integer contestProblemId,
+            @NotBlank
+            String code, @NotBlank
+            String language) {
+    }
 }

@@ -50,11 +50,13 @@ public class ApiExceptionHandler {
      * @return 400 错误响应
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException exception, HttpServletRequest request) {
+    public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException exception,
+            HttpServletRequest request) {
         String message = exception.getBindingResult().getFieldErrors().stream()
                 .map(field -> field.getField() + " " + field.getDefaultMessage())
                 .collect(Collectors.joining(", "));
-        return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", message.isBlank() ? "请求参数无效" : message, requestId(request)));
+        return ResponseEntity.badRequest()
+                .body(new ApiError("BAD_REQUEST", message.isBlank() ? "请求参数无效" : message, requestId(request)));
     }
 
     /**

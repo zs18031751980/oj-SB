@@ -24,7 +24,7 @@ public class RequestIdFilter extends OncePerRequestFilter {
      */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+            FilterChain filterChain) throws ServletException, IOException {
         String requestId = request.getHeader(RequestIdConstants.HEADER);
         // 限制长度可防止攻击者用超长头部污染日志
         if (!StringUtils.hasText(requestId) || requestId.length() > 128) {

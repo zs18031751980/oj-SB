@@ -14,7 +14,8 @@ public class EntryResolver {
     private final ContestTeamRepository teams;
 
     public EntryResolver(ContestTeamMemberRepository members, ContestTeamRepository teams) {
-        this.members = members; this.teams = teams;
+        this.members = members;
+        this.teams = teams;
     }
 
     /**
@@ -25,7 +26,8 @@ public class EntryResolver {
      * @return entry 用户 ID；入参为空时原样返回
      */
     public Integer entryUser(Integer contestId, Integer userId) {
-        if (contestId == null || userId == null) return userId;
+        if (contestId == null || userId == null)
+            return userId;
         // 先查队伍成员，再通过队伍拿到队长；任一环节缺失则回退到本人
         return members.findByContest_IdAndUser_Id(contestId, userId)
                 .flatMap(member -> teams.findById(member.getTeamId()))

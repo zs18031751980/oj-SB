@@ -19,7 +19,11 @@ public class FavoriteController {
     private final CurrentUser currentUser;
     private final FavoriteRepository favorites;
     private final ProblemRepository problems;
-    public FavoriteController(CurrentUser currentUser, FavoriteRepository favorites, ProblemRepository problems) { this.currentUser = currentUser; this.favorites = favorites; this.problems = problems; }
+    public FavoriteController(CurrentUser currentUser, FavoriteRepository favorites, ProblemRepository problems) {
+        this.currentUser = currentUser;
+        this.favorites = favorites;
+        this.problems = problems;
+    }
 
     /**
      * 列出当前用户收藏的题目。
@@ -28,13 +32,20 @@ public class FavoriteController {
      * @return 收藏列表（含题目标题、难度）与总数
      */
     @GetMapping({"", "/"})
-    public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        List<Map<String, Object>> data = favorites.findByUser_IdOrderByIdDesc(currentUser.require(authorization).getId()).stream()
-                .map(favorite -> favoriteView(favorite, problems.findById(favorite.getProblemId()).orElse(null))).toList();
+    public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false)
+    String authorization) {
+        List<Map<String, Object>> data = favorites
+                .findByUser_IdOrderByIdDesc(currentUser.require(authorization).getId()).stream()
+                .map(favorite -> favoriteView(favorite, problems.findById(favorite.getProblemId()).orElse(null)))
+                .toList();
         return Map.of("data", data, "total", data.size());
     }
     /** 构造收藏项视图；题目已被删除时标题置空、难度为 null。 */
-    private Map<String, Object> favoriteView(Favorite favorite, Problem problem) { return Map.of("problem_id", favorite.getProblemId(), "problem_title", problem == null ? "" : problem.getTitle(), "difficulty", problem == null ? null : problem.getDifficulty(), "tags", List.of(), "favorited_at", favorite.getCreatedAt() == null ? null : favorite.getCreatedAt().toString()); }
+    private Map<String, Object> favoriteView(Favorite favorite, Problem problem) {
+        return Map.of("problem_id", favorite.getProblemId(), "problem_title", problem == null ? "" : problem.getTitle(),
+                "difficulty", problem == null ? null : problem.getDifficulty(), "tags", List.of(), "favorited_at",
+                favorite.getCreatedAt() == null ? null : favorite.getCreatedAt().toString());
+    }
 
     /**
      * 添加收藏（幂等）。
@@ -44,9 +55,13 @@ public class FavoriteController {
      * @return 收藏状态
      */
     @PostMapping("/{problemId}")
-    public Map<String, Object> add(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer problemId) {
+    public Map<String, Object> add(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer problemId) {
         var user = currentUser.require(authorization);
-        if (!favorites.existsByUser_IdAndProblemId(user.getId(), problemId)) favorites.save(Favorite.of(user, problemId));
+        if (!favorites.existsByUser_IdAndProblemId(user.getId(), problemId))
+            favorites.save(Favorite.of(user, problemId));
         return Map.of("problem_id", problemId, "favorited", true);
     }
 
@@ -59,7 +74,10 @@ public class FavoriteController {
      */
     @DeleteMapping("/{problemId}")
     @Transactional
-    public Map<String, Object> remove(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer problemId) {
+    public Map<String, Object> remove(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer problemId) {
         favorites.deleteByUser_IdAndProblemId(currentUser.require(authorization).getId(), problemId);
         return Map.of("problem_id", problemId, "favorited", false);
     }
@@ -72,7 +90,11 @@ public class FavoriteController {
      * @return 收藏状态
      */
     @GetMapping("/{problemId}/status")
-    public Map<String, Object> status(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer problemId) {
-        return Map.of("problem_id", problemId, "favorited", favorites.existsByUser_IdAndProblemId(currentUser.require(authorization).getId(), problemId));
+    public Map<String, Object> status(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer problemId) {
+        return Map.of("problem_id", problemId, "favorited",
+                favorites.existsByUser_IdAndProblemId(currentUser.require(authorization).getId(), problemId));
     }
 }

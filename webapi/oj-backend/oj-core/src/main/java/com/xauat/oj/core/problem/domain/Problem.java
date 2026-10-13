@@ -42,24 +42,43 @@ public class Problem extends BaseEntity {
     @Column(name = "is_public", nullable = false)
     private boolean publicProblem = true;
 
-    protected Problem() {}
+    protected Problem() {
+    }
 
     /** 返回题目标题。 */
-    public String getTitle() { return title; }
+    public String getTitle() {
+        return title;
+    }
     /** 返回题面描述。 */
-    public String getDescription() { return description; }
+    public String getDescription() {
+        return description;
+    }
     /** 返回输入格式说明。 */
-    public String getInputDesc() { return inputDesc; }
+    public String getInputDesc() {
+        return inputDesc;
+    }
     /** 返回输出格式说明。 */
-    public String getOutputDesc() { return outputDesc; }
+    public String getOutputDesc() {
+        return outputDesc;
+    }
     /** 返回难度。 */
-    public String getDifficulty() { return difficulty; }
+    public String getDifficulty() {
+        return difficulty;
+    }
     /** 返回时间限制（毫秒）。 */
-    public int getTimeLimit() { return timeLimit; }
+    public int getTimeLimit() {
+        return timeLimit;
+    }
     /** 返回内存限制（MB）。 */
-    public int getMemoryLimit() { return memoryLimit; }
+    public int getMemoryLimit() {
+        return memoryLimit;
+    }
     /** 是否公开。 */
-    public boolean isPublicProblem() { return publicProblem; }
+    public boolean isPublicProblem() {
+        return publicProblem;
+    }
     /** 返回题目 ID。 */
-    public Integer getId() { return super.getId(); }
+    public Integer getId() {
+        return super.getId();
+    }
 }

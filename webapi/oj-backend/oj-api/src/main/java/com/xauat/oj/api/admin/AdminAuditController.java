@@ -16,7 +16,10 @@ public class AdminAuditController {
     private final CurrentUser currentUser;
     private final AuditExporter exporter;
 
-    public AdminAuditController(CurrentUser currentUser, AuditExporter exporter) { this.currentUser = currentUser; this.exporter = exporter; }
+    public AdminAuditController(CurrentUser currentUser, AuditExporter exporter) {
+        this.currentUser = currentUser;
+        this.exporter = exporter;
+    }
 
     /**
      * 按游标增量导出审计记录。
@@ -29,8 +32,10 @@ public class AdminAuditController {
      * @return 导出结果（已导出条数与下一游标）；权限不足返回 403
      */
     @PostMapping("/export")
-    public ResponseEntity<?> export(@RequestHeader(value = "Authorization", required = false) String auth,
-                                    @RequestBody(required = false) ExportRequest request) {
+    public ResponseEntity<?> export(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @RequestBody(required = false)
+            ExportRequest request) {
         var user = currentUser.require(auth);
         if (!"manager".equals(user.getRole()) && !"staff".equals(user.getRole())) {
             return ResponseEntity.status(403).body(java.util.Map.of("error", "权限不足"));
@@ -42,5 +47,6 @@ public class AdminAuditController {
     }
 
     /** 审计导出请求体：游标位置与单页条数。 */
-    public record ExportRequest(Integer after, Integer limit) {}
+    public record ExportRequest(Integer after, Integer limit) {
+    }
 }

@@ -16,7 +16,10 @@ import java.util.Map;
 public class RankingController {
     private final UserJudgeStatsRepository stats;
     private final UserRepository users;
-    public RankingController(UserJudgeStatsRepository stats, UserRepository users) { this.stats = stats; this.users = users; }
+    public RankingController(UserJudgeStatsRepository stats, UserRepository users) {
+        this.stats = stats;
+        this.users = users;
+    }
 
     /**
      * 返回全部排行榜（按名次升序）。
@@ -25,7 +28,8 @@ public class RankingController {
      */
     @GetMapping({"", "/"})
     public List<Map<String, Object>> list() {
-        return stats.findAll().stream().sorted(Comparator.comparingInt(UserJudgeStats::getRank)).map(this::view).toList();
+        return stats.findAll().stream().sorted(Comparator.comparingInt(UserJudgeStats::getRank)).map(this::view)
+                .toList();
     }
 
     /**
@@ -37,7 +41,8 @@ public class RankingController {
      * @return 排名视图
      */
     @GetMapping("/user/{id}")
-    public Map<String, Object> user(@PathVariable Integer id) {
+    public Map<String, Object> user(@PathVariable
+    Integer id) {
         return stats.findById(id).map(this::view).orElseGet(() -> {
             var u = users.findById(id).orElse(null);
             return Map.of("user_id", id, "rank", 0, "solved_count", 0, "rating", 0,
@@ -49,7 +54,8 @@ public class RankingController {
     /** 组装排名视图并补齐当前用户名与头像。 */
     private Map<String, Object> view(UserJudgeStats item) {
         var u = users.findById(item.getUserId()).orElse(null);
-        return Map.of("user_id", item.getUserId(), "rank", item.getRank(), "solved_count", item.getSolvedCount(), "rating", item.getRating(),
+        return Map.of("user_id", item.getUserId(), "rank", item.getRank(), "solved_count", item.getSolvedCount(),
+                "rating", item.getRating(),
                 "username", u == null ? "" : (u.getUsername() == null ? "" : u.getUsername()),
                 "avatar_url", u == null ? "" : (u.getAvatarUrl() == null ? "" : u.getAvatarUrl()));
     }

@@ -14,20 +14,44 @@ import jakarta.persistence.*;
 @Table(name = "contest_audit")
 public class ContestAudit extends BaseEntity {
     /** 被操作的比赛。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "contest_id") private Contest contest;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "contest_id")
+    private Contest contest;
     /** 操作人（用户）。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "actor_id") private User actor;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "actor_id")
+    private User actor;
     /** 操作动作标识，如 PUBLISH、CANCEL 等。 */
-    @Column(nullable = false) private String action;
+    @Column(nullable = false)
+    private String action;
     /** 操作原因说明。 */
-    @Column(nullable = false, columnDefinition = "text") private String reason;
+    @Column(nullable = false, columnDefinition = "text")
+    private String reason;
     /** 操作上下文载荷（JSON 文本），默认 {}。 */
-    @Column(nullable = false, columnDefinition = "text") private String payload = "{}";
-    protected ContestAudit() {}
+    @Column(nullable = false, columnDefinition = "text")
+    private String payload = "{}";
+    protected ContestAudit() {
+    }
     /** 构建一条审计记录；payload 为空时置为 {}。 */
-    public static ContestAudit of(Contest contest, User actor, String action, String reason, String payload) { ContestAudit item = new ContestAudit(); item.contest = contest; item.actor = actor; item.action = action; item.reason = reason; item.payload = payload == null ? "{}" : payload; return item; }
-    public Integer getContestId() { return contest.getId(); }
-    public String getAction() { return action; }
-    public String getReason() { return reason; }
-    public String getPayload() { return payload; }
+    public static ContestAudit of(Contest contest, User actor, String action, String reason, String payload) {
+        ContestAudit item = new ContestAudit();
+        item.contest = contest;
+        item.actor = actor;
+        item.action = action;
+        item.reason = reason;
+        item.payload = payload == null ? "{}" : payload;
+        return item;
+    }
+    public Integer getContestId() {
+        return contest.getId();
+    }
+    public String getAction() {
+        return action;
+    }
+    public String getReason() {
+        return reason;
+    }
+    public String getPayload() {
+        return payload;
+    }
 }

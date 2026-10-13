@@ -14,30 +14,60 @@ import jakarta.persistence.*;
 @Table(name = "rejudge_batches")
 public class RejudgeBatch extends BaseEntity {
     /** 所属比赛。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "contest_id") private Contest contest;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "contest_id")
+    private Contest contest;
     /** 发起人。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "actor_id") private User actor;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "actor_id")
+    private User actor;
     /** 重判原因。 */
-    @Column(nullable = false, columnDefinition = "text") private String reason;
+    @Column(nullable = false, columnDefinition = "text")
+    private String reason;
     /** 批次状态，默认 PENDING。 */
-    @Column(nullable = false) private String state = "PENDING";
+    @Column(nullable = false)
+    private String state = "PENDING";
     /** 审核人用户 ID。 */
-    @Column(name = "reviewed_by") private Integer reviewedBy;
-    protected RejudgeBatch() {}
+    @Column(name = "reviewed_by")
+    private Integer reviewedBy;
+    protected RejudgeBatch() {
+    }
     /** 发起重判批次。 */
-    public static RejudgeBatch create(Contest contest, User actor, String reason) { RejudgeBatch item = new RejudgeBatch(); item.contest = contest; item.actor = actor; item.reason = reason; return item; }
+    public static RejudgeBatch create(Contest contest, User actor, String reason) {
+        RejudgeBatch item = new RejudgeBatch();
+        item.contest = contest;
+        item.actor = actor;
+        item.reason = reason;
+        return item;
+    }
     /** 返回比赛 ID。 */
-    public Integer getContestId() { return contest.getId(); }
+    public Integer getContestId() {
+        return contest.getId();
+    }
     /** 返回批次状态。 */
-    public String getState() { return state; }
+    public String getState() {
+        return state;
+    }
     /** 返回重判原因。 */
-    public String getReason() { return reason; }
+    public String getReason() {
+        return reason;
+    }
     /** 返回发起人 ID。 */
-    public Integer getActorId() { return actor == null ? null : actor.getId(); }
+    public Integer getActorId() {
+        return actor == null ? null : actor.getId();
+    }
     /** 是否处于待审批状态。 */
-    public boolean isPending() { return "PENDING".equals(state); }
+    public boolean isPending() {
+        return "PENDING".equals(state);
+    }
     /** 审批通过并应用重判。 */
-    public void apply(Integer reviewerId) { reviewedBy = reviewerId; state = "APPLIED"; }
+    public void apply(Integer reviewerId) {
+        reviewedBy = reviewerId;
+        state = "APPLIED";
+    }
     /** 审批驳回/取消重判。 */
-    public void cancel(Integer reviewerId) { reviewedBy = reviewerId; state = "CANCELLED"; }
+    public void cancel(Integer reviewerId) {
+        reviewedBy = reviewerId;
+        state = "CANCELLED";
+    }
 }

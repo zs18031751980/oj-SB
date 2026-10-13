@@ -18,26 +18,41 @@ public class UserJudgeStats {
     /** 全局排名。 */
     private int rank;
     /** 已解决题目总数。 */
-    @Column(name = "solved_count") private int solvedCount;
+    @Column(name = "solved_count")
+    private int solvedCount;
     /** 积分/等级分。 */
     private int rating;
     /** 简单题解决数。 */
-    @Column(name = "easy_count") private int easyCount;
+    @Column(name = "easy_count")
+    private int easyCount;
     /** 中等题解决数。 */
-    @Column(name = "medium_count") private int mediumCount;
+    @Column(name = "medium_count")
+    private int mediumCount;
     /** 困难题解决数。 */
-    @Column(name = "hard_count") private int hardCount;
+    @Column(name = "hard_count")
+    private int hardCount;
     /** 创建时间。 */
-    @Column(name = "created_at", nullable = false) private java.time.LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false)
+    private java.time.LocalDateTime createdAt;
     /** 最后更新时间。 */
-    @Column(name = "updated_at", nullable = false) private java.time.LocalDateTime updatedAt;
-    protected UserJudgeStats() {}
+    @Column(name = "updated_at", nullable = false)
+    private java.time.LocalDateTime updatedAt;
+    protected UserJudgeStats() {
+    }
     /** 返回用户 ID。 */
-    public Integer getUserId() { return userId; }
+    public Integer getUserId() {
+        return userId;
+    }
     /** 返回排名。 */
-    public int getRank() { return rank; }
+    public int getRank() {
+        return rank;
+    }
     /** 返回解决题数。 */
-    public int getSolvedCount() { return solvedCount; }
+    public int getSolvedCount() {
+        return solvedCount;
+    }
     /** 返回积分。 */
-    public int getRating() { return rating; }
+    public int getRating() {
+        return rating;
+    }
 }

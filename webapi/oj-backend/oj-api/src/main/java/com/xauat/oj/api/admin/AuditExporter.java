@@ -24,8 +24,11 @@ public class AuditExporter {
     private final String directory;
 
     public AuditExporter(ContestAuditRepository audits, ObjectMapper mapper,
-                         @Value("${oj.audit.export-dir:}") String directory) {
-        this.audits = audits; this.mapper = mapper; this.directory = directory;
+            @Value("${oj.audit.export-dir:}")
+            String directory) {
+        this.audits = audits;
+        this.mapper = mapper;
+        this.directory = directory;
     }
 
     /**
@@ -42,18 +45,24 @@ public class AuditExporter {
         if (directory == null || directory.isBlank()) {
             throw new com.xauat.oj.common.exception.OjException("SERVICE_UNAVAILABLE", "未配置审计导出目录");
         }
-        if (after < 0) throw new IllegalArgumentException("after 必须为非负整数");
+        if (after < 0)
+            throw new IllegalArgumentException("after 必须为非负整数");
         int size = Math.max(1, Math.min(limit, 1000));
         List<ContestAudit> rows = audits.findTop1000ByIdGreaterThanOrderByIdAsc(after).stream().limit(size).toList();
         Path root = Path.of(directory).toAbsolutePath().normalize();
-        int exported = 0; int cursor = after;
+        int exported = 0;
+        int cursor = after;
         try {
             Files.createDirectories(root);
             // 目录权限收紧为仅属主可读写执行（非 POSIX 文件系统忽略）。
-            try { Files.setPosixFilePermissions(root, PosixFilePermissions.fromString("rwx------")); } catch (UnsupportedOperationException ignored) { }
+            try {
+                Files.setPosixFilePermissions(root, PosixFilePermissions.fromString("rwx------"));
+            } catch (UnsupportedOperationException ignored) {
+            }
             for (ContestAudit row : rows) {
                 writeOnce(root, "audit-" + row.getId() + ".json", row);
-                exported++; cursor = row.getId();
+                exported++;
+                cursor = row.getId();
             }
         } catch (Exception exception) {
             throw new com.xauat.oj.common.exception.OjException("SERVICE_UNAVAILABLE", "审计导出失败");
@@ -79,15 +88,20 @@ public class AuditExporter {
         byte[] content = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(data);
         Path target = root.resolve(name);
         if (Files.exists(target)) {
-            if (!java.util.Arrays.equals(Files.readAllBytes(target), content)) throw new IllegalStateException("审计归档冲突: " + name);
+            if (!java.util.Arrays.equals(Files.readAllBytes(target), content))
+                throw new IllegalStateException("审计归档冲突: " + name);
             return;
         }
         // 先写临时文件，再原子重命名，避免导出中途产生半成品文件。
         Path temp = root.resolve(".pending-" + java.util.UUID.randomUUID().toString().replace("-", ""));
         Files.write(temp, content, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-        try { Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE); }
-        catch (FileAlreadyExistsException exception) {
-            if (!java.util.Arrays.equals(Files.readAllBytes(target), content)) throw new IllegalStateException("审计归档冲突: " + name);
-        } finally { Files.deleteIfExists(temp); }
+        try {
+            Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (FileAlreadyExistsException exception) {
+            if (!java.util.Arrays.equals(Files.readAllBytes(target), content))
+                throw new IllegalStateException("审计归档冲突: " + name);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 }

@@ -13,21 +13,45 @@ import jakarta.persistence.*;
 @Table(name = "contest_events")
 public class ContestEvent extends BaseEntity {
     /** 所属比赛。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "contest_id") private Contest contest;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "contest_id")
+    private Contest contest;
     /** 事件类型标识。 */
-    @Column(nullable = false) private String kind;
+    @Column(nullable = false)
+    private String kind;
     /** 事件可见范围，默认 jury（仅裁判可见）。 */
-    @Column(nullable = false) private String audience = "jury";
+    @Column(nullable = false)
+    private String audience = "jury";
     /** 指定接收者用户 ID（当 audience 为定向用户时使用）。 */
-    @Column(name = "recipient_id") private Integer recipientId;
+    @Column(name = "recipient_id")
+    private Integer recipientId;
     /** 事件载荷（JSON 文本）。 */
-    @Column(nullable = false, columnDefinition = "text") private String payload;
-    protected ContestEvent() {}
+    @Column(nullable = false, columnDefinition = "text")
+    private String payload;
+    protected ContestEvent() {
+    }
     /** 构建一条比赛事件。 */
-    public static ContestEvent of(Contest contest, String kind, String audience, String payload) { ContestEvent item = new ContestEvent(); item.contest = contest; item.kind = kind; item.audience = audience; item.payload = payload; return item; }
-    public Integer getContestId() { return contest.getId(); }
-    public String getKind() { return kind; }
-    public String getAudience() { return audience; }
-    public Integer getRecipientId() { return recipientId; }
-    public String getPayload() { return payload; }
+    public static ContestEvent of(Contest contest, String kind, String audience, String payload) {
+        ContestEvent item = new ContestEvent();
+        item.contest = contest;
+        item.kind = kind;
+        item.audience = audience;
+        item.payload = payload;
+        return item;
+    }
+    public Integer getContestId() {
+        return contest.getId();
+    }
+    public String getKind() {
+        return kind;
+    }
+    public String getAudience() {
+        return audience;
+    }
+    public Integer getRecipientId() {
+        return recipientId;
+    }
+    public String getPayload() {
+        return payload;
+    }
 }

@@ -15,11 +15,16 @@ import java.time.LocalDateTime;
 public class RankingProjection {
     private final JdbcTemplate jdbc;
 
-    public RankingProjection(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    public RankingProjection(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
 
     /** 定时刷新入口：仅当投影超过 10 秒未重建时才重建，避免任务过密。 */
-    @Scheduled(fixedDelayString = "${oj.ranking.refresh-ms:15000}", initialDelayString = "${oj.ranking.initial-delay-ms:3000}")
-    public void refresh() { refreshIfStale(10); }
+    @Scheduled(fixedDelayString = "${oj.ranking.refresh-ms:15000}",
+            initialDelayString = "${oj.ranking.initial-delay-ms:3000}")
+    public void refresh() {
+        refreshIfStale(10);
+    }
 
     /**
      * 若投影旧于 {@code minAgeSeconds} 则重建。
@@ -32,8 +37,11 @@ public class RankingProjection {
     public void refreshIfStale(int minAgeSeconds) {
         // 读取上次构建时间；未到间隔直接跳过。
         LocalDateTime builtAt = jdbc.query("select built_at from ranking_projection_state where id = 1",
-                rs -> rs.next() ? rs.getTimestamp("built_at") == null ? null : rs.getTimestamp("built_at").toLocalDateTime() : null);
-        if (builtAt != null && builtAt.isAfter(LocalDateTime.now().minusSeconds(minAgeSeconds))) return;
+                rs -> rs.next()
+                        ? rs.getTimestamp("built_at") == null ? null : rs.getTimestamp("built_at").toLocalDateTime()
+                        : null);
+        if (builtAt != null && builtAt.isAfter(LocalDateTime.now().minusSeconds(minAgeSeconds)))
+            return;
         jdbc.update("insert into ranking_projection_state (id, built_at) values (1, now()) "
                 + "on conflict (id) do nothing");
         // 全量替换：先清空统计表再重算。

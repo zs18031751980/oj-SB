@@ -37,7 +37,8 @@ public class CurrentUser {
      */
     public User require(String authorization) {
         User user = optional(authorization);
-        if (user == null) throw new com.xauat.oj.common.exception.OjException("UNAUTHORIZED", "令牌无效或已过期");
+        if (user == null)
+            throw new com.xauat.oj.common.exception.OjException("UNAUTHORIZED", "令牌无效或已过期");
         return user;
     }
 
@@ -48,12 +49,14 @@ public class CurrentUser {
      * @return 有效用户；任一校验失败返回 {@code null}
      */
     public User optional(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) return null;
+        if (authorization == null || !authorization.startsWith("Bearer "))
+            return null;
         try {
             Claims claims = jwtService.parseAccess(authorization.substring(7));
             // 仅凭 JWT 签名不足以判定在线状态，必须回查会话 id 才能感知撤销与过期
             String sid = claims.get("sid", String.class);
-            if (sid == null) return null;
+            if (sid == null)
+                return null;
             AuthSession session = sessions.findById(sid).orElse(null);
             if (session == null || session.isRevoked() || session.getExpiresAt() == null
                     || !session.getExpiresAt().isAfter(LocalDateTime.now()) || session.getUserId() == null) {
@@ -61,7 +64,8 @@ public class CurrentUser {
             }
             // 校验令牌主体与会话归属一致，防止令牌被替换到其它会话
             Integer userId = Integer.valueOf(claims.getSubject());
-            if (!userId.equals(session.getUserId())) return null;
+            if (!userId.equals(session.getUserId()))
+                return null;
             return users.findById(userId).filter(User::isActive).orElse(null);
         } catch (RuntimeException exception) {
             return null;

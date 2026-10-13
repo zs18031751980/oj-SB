@@ -48,5 +48,6 @@ public interface UserCodeRepository extends JpaRepository<UserCode, Integer> {
      * @return 不同题目数量
      */
     @Query("select count(distinct c.problemId) from UserCode c where c.user.id = :userId")
-    long countDistinctProblems(@Param("userId") Integer userId);
+    long countDistinctProblems(@Param("userId")
+    Integer userId);
 }

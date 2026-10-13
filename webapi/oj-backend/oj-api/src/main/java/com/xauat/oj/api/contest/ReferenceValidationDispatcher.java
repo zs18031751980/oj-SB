@@ -14,7 +14,8 @@ public class ReferenceValidationDispatcher {
     private final JudgeQueue queue;
 
     public ReferenceValidationDispatcher(ReferenceValidationJobRepository jobs, JudgeQueue queue) {
-        this.jobs = jobs; this.queue = queue;
+        this.jobs = jobs;
+        this.queue = queue;
     }
 
     /**
@@ -26,8 +27,12 @@ public class ReferenceValidationDispatcher {
     public void dispatch() {
         // 每次最多取 20 个最久未处理的 PENDING 任务
         for (var job : jobs.findTop20ByStateOrderByCreatedAtAsc("PENDING")) {
-            try { queue.publishOnce(JudgeQueues.TESTCASE_GEN, job.getId(), 604800); job.markDispatched(); jobs.save(job); }
-            catch (RuntimeException ignored) { }
+            try {
+                queue.publishOnce(JudgeQueues.TESTCASE_GEN, job.getId(), 604800);
+                job.markDispatched();
+                jobs.save(job);
+            } catch (RuntimeException ignored) {
+            }
         }
     }
 }

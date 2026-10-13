@@ -13,12 +13,17 @@ import java.time.LocalDateTime;
 @Table(name = "ranking_projection_state")
 public class RankingProjectionState {
     /** 固定主键，单例行恒为 1。 */
-    @Id private Integer id = 1;
+    @Id
+    private Integer id = 1;
     /** 投影最后构建时间。 */
-    @Column(name = "built_at") private LocalDateTime builtAt;
+    @Column(name = "built_at")
+    private LocalDateTime builtAt;
     /** 创建时间。 */
-    @Column(name = "created_at", nullable = false) private LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
     /** 最后更新时间。 */
-    @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
-    protected RankingProjectionState() {}
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+    protected RankingProjectionState() {
+    }
 }

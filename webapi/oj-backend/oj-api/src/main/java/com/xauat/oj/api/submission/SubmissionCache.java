@@ -18,7 +18,10 @@ public class SubmissionCache {
     private final StringRedisTemplate redis;
     private final ObjectMapper mapper;
 
-    public SubmissionCache(StringRedisTemplate redis, ObjectMapper mapper) { this.redis = redis; this.mapper = mapper; }
+    public SubmissionCache(StringRedisTemplate redis, ObjectMapper mapper) {
+        this.redis = redis;
+        this.mapper = mapper;
+    }
 
     /**
      * 读取缓存；Redis 异常时返回空，不影响主流程。
@@ -29,8 +32,11 @@ public class SubmissionCache {
     public Optional<LinkedHashMap<String, Object>> get(String key) {
         try {
             String value = redis.opsForValue().get(key);
-            if (value == null || value.isBlank()) return Optional.empty();
-            return Optional.of(mapper.readValue(value, new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {}));
+            if (value == null || value.isBlank())
+                return Optional.empty();
+            return Optional.of(mapper.readValue(value,
+                    new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {
+                    }));
         } catch (Exception exception) {
             return Optional.empty();
         }
@@ -38,12 +44,17 @@ public class SubmissionCache {
 
     /** 写入缓存（固定 TTL），失败静默忽略。 */
     public void put(String key, Object body) {
-        try { redis.opsForValue().set(key, mapper.writeValueAsString(body), TTL); }
-        catch (Exception ignored) { }
+        try {
+            redis.opsForValue().set(key, mapper.writeValueAsString(body), TTL);
+        } catch (Exception ignored) {
+        }
     }
 
     /** 删除缓存键，供判题写入终态后主动失效。 */
     public void evict(String key) {
-        try { redis.delete(key); } catch (RuntimeException ignored) { }
+        try {
+            redis.delete(key);
+        } catch (RuntimeException ignored) {
+        }
     }
 }

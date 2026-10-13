@@ -42,13 +42,20 @@ public class AdminContestController {
     private final ReferenceValidationJobRepository validationJobs;
     private final ObjectMapper mapper;
 
-    public AdminContestController(CurrentUser currentUser, ContestRepository contests, ContestProblemRepository problems,
-                                  ContestTestcaseRepository testcases, ContestSubmissionRepository submissions,
-                                  JudgementRepository judgements, ContestJudgeOutboxRepository outboxes,
-                                  ReferenceValidationJobRepository validationJobs, ObjectMapper mapper) {
-        this.currentUser = currentUser; this.contests = contests; this.problems = problems; this.testcases = testcases;
-        this.submissions = submissions; this.judgements = judgements; this.outboxes = outboxes;
-        this.validationJobs = validationJobs; this.mapper = mapper;
+    public AdminContestController(CurrentUser currentUser, ContestRepository contests,
+            ContestProblemRepository problems,
+            ContestTestcaseRepository testcases, ContestSubmissionRepository submissions,
+            JudgementRepository judgements, ContestJudgeOutboxRepository outboxes,
+            ReferenceValidationJobRepository validationJobs, ObjectMapper mapper) {
+        this.currentUser = currentUser;
+        this.contests = contests;
+        this.problems = problems;
+        this.testcases = testcases;
+        this.submissions = submissions;
+        this.judgements = judgements;
+        this.outboxes = outboxes;
+        this.validationJobs = validationJobs;
+        this.mapper = mapper;
     }
 
     /**
@@ -61,10 +68,15 @@ public class AdminContestController {
      * @return 题目摘要列表；缺少 contest_id 返回 400
      */
     @GetMapping({"", "/"})
-    public ResponseEntity<?> list(@RequestHeader(value = "Authorization", required = false) String auth, @RequestParam(required = false) Integer contest_id) {
+    public ResponseEntity<?> list(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @RequestParam(required = false)
+            Integer contest_id) {
         manager(auth);
-        if (contest_id == null) return ResponseEntity.badRequest().body(Map.of("error", "缺少 contest_id"));
-        return ResponseEntity.ok(problems.findByContest_IdOrderBySortOrderAscIdAsc(contest_id).stream().map(this::view).toList());
+        if (contest_id == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "缺少 contest_id"));
+        return ResponseEntity
+                .ok(problems.findByContest_IdOrderBySortOrderAscIdAsc(contest_id).stream().map(this::view).toList());
     }
 
     /**
@@ -77,12 +89,17 @@ public class AdminContestController {
      * @return 题目详情与 testcases；不存在返回 404
      */
     @GetMapping("/{id}")
-    public ResponseEntity<?> detail(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id) {
+    public ResponseEntity<?> detail(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @PathVariable
+            Integer id) {
         manager(auth);
         ContestProblem problem = problems.findById(id).orElse(null);
-        if (problem == null) return ResponseEntity.notFound().build();
+        if (problem == null)
+            return ResponseEntity.notFound().build();
         Map<String, Object> body = view(problem);
-        body.put("testcases", testcases.findByContestProblem_IdOrderBySortOrderAscIdAsc(id).stream().map(this::testcaseView).toList());
+        body.put("testcases", testcases.findByContestProblem_IdOrderBySortOrderAscIdAsc(id).stream()
+                .map(this::testcaseView).toList());
         return ResponseEntity.ok(body);
     }
 
@@ -99,33 +116,48 @@ public class AdminContestController {
      */
     @PostMapping({"", "/"})
     @Transactional
-    public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false) String auth,
-                                    @RequestParam(required = false) Integer contest_id,
-                                    @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @RequestParam(required = false)
+            Integer contest_id,
+            @RequestBody
+            Map<String, Object> body) {
         manager(auth);
-        if (contest_id == null) return ResponseEntity.badRequest().body(Map.of("error", "缺少 contest_id"));
+        if (contest_id == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "缺少 contest_id"));
         Contest contest = contests.findById(contest_id).orElse(null);
-        if (contest == null) return ResponseEntity.notFound().build();
+        if (contest == null)
+            return ResponseEntity.notFound().build();
         // 发布后题目与测试数据冻结，只有 DRAFT/READY 才可写。
         var editable = requireEditable(contest);
-        if (editable != null) return editable;
+        if (editable != null)
+            return editable;
         // 必填字段校验。
         for (String field : List.of("problem_index", "title", "description", "correct_answer")) {
-            if (str(body.get(field)).isBlank()) return ResponseEntity.badRequest().body(Map.of("error", field + " 不能为空"));
+            if (str(body.get(field)).isBlank())
+                return ResponseEntity.badRequest().body(Map.of("error", field + " 不能为空"));
         }
         int[] limits;
         // 校验时间/内存限制范围。
-        try { limits = validateLimits(body.get("time_limit"), body.get("memory_limit")); }
-        catch (IllegalArgumentException exception) { return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage())); }
+        try {
+            limits = validateLimits(body.get("time_limit"), body.get("memory_limit"));
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
+        }
         List<Map<String, Object>> normalized;
         // 归一化测试数据（支持 testcases 或 samples 两种来源）。
-        try { normalized = normalizeTestcases(body.get("testcases"), body.get("samples")); }
-        catch (IllegalArgumentException exception) { return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage())); }
+        try {
+            normalized = normalizeTestcases(body.get("testcases"), body.get("samples"));
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
+        }
 
-        ContestProblem problem = ContestProblem.create(contest, str(body.get("problem_index")).trim(), str(body.get("title")).trim(),
+        ContestProblem problem = ContestProblem.create(contest, str(body.get("problem_index")).trim(),
+                str(body.get("title")).trim(),
                 str(body.get("description")), str(body.get("input_desc")), str(body.get("output_desc")),
                 str(body.get("correct_answer")), limits[0], limits[1], strOrDefault(body.get("difficulty"), "中等"),
-                strOrDefault(body.get("language"), "cpp"), samplesJson(body.get("samples")), intOrDefault(body.get("sort_order"), 0));
+                strOrDefault(body.get("language"), "cpp"), samplesJson(body.get("samples")),
+                intOrDefault(body.get("sort_order"), 0));
         problems.save(problem);
         replaceTestcases(problem, normalized);
         // 创建参考解校验任务：由后台 Worker 验证题面与测试数据是否自洽。
@@ -148,32 +180,53 @@ public class AdminContestController {
      */
     @PutMapping("/{id}")
     @Transactional
-    public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @PathVariable
+            Integer id, @RequestBody
+            Map<String, Object> body) {
         manager(auth);
         ContestProblem problem = problems.findById(id).orElse(null);
-        if (problem == null) return ResponseEntity.notFound().build();
+        if (problem == null)
+            return ResponseEntity.notFound().build();
         Contest contest = contests.findById(problem.getContestId()).orElse(null);
         var editable = requireEditable(contest);
-        if (editable != null) return editable;
-        Integer timeLimit = body.containsKey("time_limit") ? intOrDefault(body.get("time_limit"), problem.getTimeLimit()) : null;
-        Integer memoryLimit = body.containsKey("memory_limit") ? intOrDefault(body.get("memory_limit"), problem.getMemoryLimit()) : null;
-        try { validateLimits(timeLimit == null ? problem.getTimeLimit() : timeLimit, memoryLimit == null ? problem.getMemoryLimit() : memoryLimit); }
-        catch (IllegalArgumentException exception) { return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage())); }
-        problem.updateAsset(str(body.get("problem_index")), str(body.get("title")), body.containsKey("description") ? str(body.get("description")) : null,
-                body.containsKey("input_desc") ? str(body.get("input_desc")) : null, body.containsKey("output_desc") ? str(body.get("output_desc")) : null,
+        if (editable != null)
+            return editable;
+        Integer timeLimit = body.containsKey("time_limit")
+                ? intOrDefault(body.get("time_limit"), problem.getTimeLimit())
+                : null;
+        Integer memoryLimit = body.containsKey("memory_limit")
+                ? intOrDefault(body.get("memory_limit"), problem.getMemoryLimit())
+                : null;
+        try {
+            validateLimits(timeLimit == null ? problem.getTimeLimit() : timeLimit,
+                    memoryLimit == null ? problem.getMemoryLimit() : memoryLimit);
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
+        }
+        problem.updateAsset(str(body.get("problem_index")), str(body.get("title")),
+                body.containsKey("description") ? str(body.get("description")) : null,
+                body.containsKey("input_desc") ? str(body.get("input_desc")) : null,
+                body.containsKey("output_desc") ? str(body.get("output_desc")) : null,
                 body.containsKey("correct_answer") ? str(body.get("correct_answer")) : null, timeLimit, memoryLimit,
-                body.containsKey("difficulty") ? str(body.get("difficulty")) : null, body.containsKey("language") ? str(body.get("language")) : null,
+                body.containsKey("difficulty") ? str(body.get("difficulty")) : null,
+                body.containsKey("language") ? str(body.get("language")) : null,
                 body.containsKey("samples") ? samplesJson(body.get("samples")) : null,
                 body.containsKey("sort_order") ? intOrDefault(body.get("sort_order"), problem.getSortOrder()) : null);
         List<Map<String, Object>> replacement = null;
         if (body.containsKey("testcases") || body.containsKey("samples")) {
-            try { replacement = normalizeTestcases(body.get("testcases"), body.get("samples")); }
-            catch (IllegalArgumentException exception) { return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage())); }
+            try {
+                replacement = normalizeTestcases(body.get("testcases"), body.get("samples"));
+            } catch (IllegalArgumentException exception) {
+                return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
+            }
         }
         // 递增校验版本，使旧的校验结果失效并触发重校验。
         problem.bumpValidation();
         problems.save(problem);
-        if (replacement != null) replaceTestcases(problem, replacement);
+        if (replacement != null)
+            replaceTestcases(problem, replacement);
         validationJobs.save(ReferenceValidationJob.create(UUID.randomUUID().toString(), problem));
         return ResponseEntity.ok(view(problem));
     }
@@ -190,13 +243,18 @@ public class AdminContestController {
      */
     @DeleteMapping("/{id}")
     @Transactional
-    public ResponseEntity<?> delete(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id) {
+    public ResponseEntity<?> delete(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @PathVariable
+            Integer id) {
         manager(auth);
         ContestProblem problem = problems.findById(id).orElse(null);
-        if (problem == null) return ResponseEntity.notFound().build();
+        if (problem == null)
+            return ResponseEntity.notFound().build();
         Contest contest = contests.findById(problem.getContestId()).orElse(null);
         var editable = requireEditable(contest);
-        if (editable != null) return editable;
+        if (editable != null)
+            return editable;
         try {
             // 依据外键依赖顺序清理，避免约束冲突。
             judgements.deleteByProblemId(id);
@@ -212,9 +270,13 @@ public class AdminContestController {
 
     /** 自动随机生成已停用：必须由出题人提供经过验证的测试数据。 */
     @PostMapping("/{id}/regenerate-testcases")
-    public ResponseEntity<?> regenerate(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id) {
+    public ResponseEntity<?> regenerate(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @PathVariable
+            Integer id) {
         manager(auth);
-        if (!problems.existsById(id)) return ResponseEntity.notFound().build();
+        if (!problems.existsById(id))
+            return ResponseEntity.notFound().build();
         return ResponseEntity.status(409).body(Map.of("error", "自动随机生成已停用，请在编辑题目时提交经过验证的测试数据"));
     }
 
@@ -229,10 +291,14 @@ public class AdminContestController {
      * @return 状态、测试数据总数、已生成数与错误信息
      */
     @GetMapping("/{id}/testcase-generation")
-    public ResponseEntity<?> generation(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id) {
+    public ResponseEntity<?> generation(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @PathVariable
+            Integer id) {
         manager(auth);
         ContestProblem problem = problems.findById(id).orElse(null);
-        if (problem == null) return ResponseEntity.notFound().build();
+        if (problem == null)
+            return ResponseEntity.notFound().build();
         int count = testcases.findByContestProblem_IdOrderBySortOrderAscIdAsc(id).size();
         String status = switch (problem.getValidationStatus() == null ? "PENDING" : problem.getValidationStatus()) {
             case "VALID" -> "done";
@@ -254,7 +320,8 @@ public class AdminContestController {
      * @return 不可编辑时返回对应错误响应，可编辑时返回 {@code null}
      */
     private ResponseEntity<?> requireEditable(Contest contest) {
-        if (contest == null) return ResponseEntity.notFound().build();
+        if (contest == null)
+            return ResponseEntity.notFound().build();
         String state = contest.getLifecycleState();
         if (!List.of("DRAFT", "READY").contains(state)) {
             return ResponseEntity.status(409).body(Map.of("error", "比赛已发布，题目与测试数据已冻结"));
@@ -273,8 +340,10 @@ public class AdminContestController {
     private int[] validateLimits(Object timeLimit, Object memoryLimit) {
         int timeMs = intOrDefault(timeLimit, 1000);
         int memoryMb = intOrDefault(memoryLimit, 256);
-        if (timeMs < 50 || timeMs > 60000) throw new IllegalArgumentException("时间限制必须在 50ms 到 60000ms 之间");
-        if (memoryMb < 16 || memoryMb > 2048) throw new IllegalArgumentException("内存限制必须在 16MB 到 2048MB 之间");
+        if (timeMs < 50 || timeMs > 60000)
+            throw new IllegalArgumentException("时间限制必须在 50ms 到 60000ms 之间");
+        if (memoryMb < 16 || memoryMb > 2048)
+            throw new IllegalArgumentException("内存限制必须在 16MB 到 2048MB 之间");
         return new int[]{timeMs, memoryMb};
     }
 
@@ -289,20 +358,30 @@ public class AdminContestController {
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> normalizeTestcases(Object rawTestcases, Object rawSamples) {
         Object source = rawTestcases != null ? rawTestcases : rawSamples;
-        if (source == null) throw new IllegalArgumentException("至少需要提供一组测试数据");
+        if (source == null)
+            throw new IllegalArgumentException("至少需要提供一组测试数据");
         if (source instanceof String text) {
-            if (text.isBlank()) throw new IllegalArgumentException("至少需要提供一组测试数据");
-            try { source = mapper.readValue(text, new TypeReference<List<Map<String, Object>>>() {}); }
-            catch (Exception exception) { throw new IllegalArgumentException("测试数据必须是合法 JSON"); }
+            if (text.isBlank())
+                throw new IllegalArgumentException("至少需要提供一组测试数据");
+            try {
+                source = mapper.readValue(text, new TypeReference<List<Map<String, Object>>>() {
+                });
+            } catch (Exception exception) {
+                throw new IllegalArgumentException("测试数据必须是合法 JSON");
+            }
         }
-        if (!(source instanceof List<?> list) || list.isEmpty()) throw new IllegalArgumentException("至少需要提供一组测试数据");
-        if (list.size() > 200) throw new IllegalArgumentException("测试数据最多 200 组");
+        if (!(source instanceof List<?> list) || list.isEmpty())
+            throw new IllegalArgumentException("至少需要提供一组测试数据");
+        if (list.size() > 200)
+            throw new IllegalArgumentException("测试数据最多 200 组");
         List<Map<String, Object>> normalized = new ArrayList<>();
         for (int index = 0; index < list.size(); index++) {
-            if (!(list.get(index) instanceof Map<?, ?> item) || !item.containsKey("input") || !item.containsKey("output")) {
+            if (!(list.get(index) instanceof Map<?, ?> item) || !item.containsKey("input")
+                    || !item.containsKey("output")) {
                 throw new IllegalArgumentException("第 " + (index + 1) + " 组测试数据必须包含 input 与 output");
             }
-            Object input = item.get("input"); Object output = item.get("output");
+            Object input = item.get("input");
+            Object output = item.get("output");
             if (!(input instanceof String inputText) || !(output instanceof String outputText)) {
                 throw new IllegalArgumentException("第 " + (index + 1) + " 组测试数据的 input 与 output 必须是字符串");
             }
@@ -324,7 +403,8 @@ public class AdminContestController {
         testcases.deleteByProblemId(problem.getId());
         int order = 0;
         for (Map<String, Object> item : normalized) {
-            testcases.save(ContestTestcase.create(problem, String.valueOf(item.get("input")), String.valueOf(item.get("output")),
+            testcases.save(ContestTestcase.create(problem, String.valueOf(item.get("input")),
+                    String.valueOf(item.get("output")),
                     Boolean.TRUE.equals(item.get("is_sample")), order++));
         }
     }
@@ -364,8 +444,10 @@ public class AdminContestController {
 
     private List<Map<String, Object>> parseSamples(String raw) {
         try {
-            if (raw == null || raw.isBlank()) return List.of();
-            return mapper.readValue(raw, new TypeReference<List<Map<String, Object>>>() {});
+            if (raw == null || raw.isBlank())
+                return List.of();
+            return mapper.readValue(raw, new TypeReference<List<Map<String, Object>>>() {
+            });
         } catch (Exception exception) {
             return List.of();
         }
@@ -387,13 +469,29 @@ public class AdminContestController {
     }
 
     private String samplesJson(Object value) {
-        if (value == null) return "[]";
-        if (value instanceof String text) return text.isBlank() ? "[]" : text;
-        try { return mapper.writeValueAsString(value); }
-        catch (Exception exception) { return "[]"; }
+        if (value == null)
+            return "[]";
+        if (value instanceof String text)
+            return text.isBlank() ? "[]" : text;
+        try {
+            return mapper.writeValueAsString(value);
+        } catch (Exception exception) {
+            return "[]";
+        }
     }
 
-    private static String str(Object value) { return value == null ? "" : String.valueOf(value); }
-    private static String strOrDefault(Object value, String fallback) { String text = str(value); return text.isBlank() ? fallback : text; }
-    private static int intOrDefault(Object value, int fallback) { try { return value == null ? fallback : Integer.parseInt(String.valueOf(value)); } catch (NumberFormatException exception) { return fallback; } }
+    private static String str(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+    private static String strOrDefault(Object value, String fallback) {
+        String text = str(value);
+        return text.isBlank() ? fallback : text;
+    }
+    private static int intOrDefault(Object value, int fallback) {
+        try {
+            return value == null ? fallback : Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            return fallback;
+        }
+    }
 }

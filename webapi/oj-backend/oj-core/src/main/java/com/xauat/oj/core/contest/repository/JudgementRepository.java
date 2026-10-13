@@ -29,7 +29,8 @@ public interface JudgementRepository extends JpaRepository<Judgement, Integer> {
      */
     @Modifying
     @Query("delete from Judgement j where j.submission.contestProblem.id = :problemId")
-    int deleteByProblemId(@Param("problemId") Integer problemId);
+    int deleteByProblemId(@Param("problemId")
+    Integer problemId);
 
     /**
      * 删除指定赛事下的全部评测结果。
@@ -39,5 +40,6 @@ public interface JudgementRepository extends JpaRepository<Judgement, Integer> {
      */
     @Modifying
     @Query("delete from Judgement j where j.submission.contest.id = :contestId")
-    int deleteByContestId(@Param("contestId") Integer contestId);
+    int deleteByContestId(@Param("contestId")
+    Integer contestId);
 }

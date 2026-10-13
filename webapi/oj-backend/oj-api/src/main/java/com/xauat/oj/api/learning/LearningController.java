@@ -23,8 +23,11 @@ public class LearningController {
     private final LearnFavoriteRepository favorites;
     private final LearnBrowsingHistoryRepository history;
 
-    public LearningController(CurrentUser currentUser, LearnFavoriteRepository favorites, LearnBrowsingHistoryRepository history) {
-        this.currentUser = currentUser; this.favorites = favorites; this.history = history;
+    public LearningController(CurrentUser currentUser, LearnFavoriteRepository favorites,
+            LearnBrowsingHistoryRepository history) {
+        this.currentUser = currentUser;
+        this.favorites = favorites;
+        this.history = history;
     }
 
     /**
@@ -34,9 +37,14 @@ public class LearningController {
      * @return 收藏列表与总数
      */
     @GetMapping("/learn-favorites")
-    public Map<String, Object> favorites(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        List<Map<String, Object>> data = favorites.findByUser_IdOrderByIdDesc(currentUser.require(authorization).getId()).stream()
-                .map(item -> Map.<String, Object>of("resource_id", item.getResourceId(), "favorited_at", item.getCreatedAt() == null ? null : item.getCreatedAt().toString())).toList();
+    public Map<String, Object> favorites(
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization) {
+        List<Map<String, Object>> data = favorites
+                .findByUser_IdOrderByIdDesc(currentUser.require(authorization).getId()).stream()
+                .map(item -> Map.<String, Object>of("resource_id", item.getResourceId(), "favorited_at",
+                        item.getCreatedAt() == null ? null : item.getCreatedAt().toString()))
+                .toList();
         return Map.of("data", data, "total", data.size());
     }
 
@@ -48,10 +56,15 @@ public class LearningController {
      * @return 收藏状态
      */
     @PostMapping("/learn-favorites/{*resourcePath}")
-    public Map<String, Object> addFavorite(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable String resourcePath) {
+    public Map<String, Object> addFavorite(
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization,
+            @PathVariable
+            String resourcePath) {
         var user = currentUser.require(authorization);
         String resourceId = resourceId(resourcePath, false);
-        if (!favorites.existsByUser_IdAndResourceId(user.getId(), resourceId)) favorites.save(LearnFavorite.of(user, resourceId));
+        if (!favorites.existsByUser_IdAndResourceId(user.getId(), resourceId))
+            favorites.save(LearnFavorite.of(user, resourceId));
         return Map.of("resource_id", resourceId, "favorited", true);
     }
 
@@ -64,7 +77,11 @@ public class LearningController {
      */
     @DeleteMapping("/learn-favorites/{*resourcePath}")
     @Transactional
-    public Map<String, Object> removeFavorite(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable String resourcePath) {
+    public Map<String, Object> removeFavorite(
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization,
+            @PathVariable
+            String resourcePath) {
         String resourceId = resourceId(resourcePath, true);
         favorites.deleteByUser_IdAndResourceId(currentUser.require(authorization).getId(), resourceId);
         return Map.of("resource_id", resourceId, "favorited", false);
@@ -78,16 +95,23 @@ public class LearningController {
      * @return 收藏状态
      */
     @GetMapping("/learn-favorites/{*resourcePath}")
-    public Map<String, Object> favoriteStatus(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable String resourcePath) {
+    public Map<String, Object> favoriteStatus(
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization,
+            @PathVariable
+            String resourcePath) {
         String resourceId = resourceId(resourcePath, true);
-        return Map.of("resource_id", resourceId, "favorited", favorites.existsByUser_IdAndResourceId(currentUser.require(authorization).getId(), resourceId));
+        return Map.of("resource_id", resourceId, "favorited",
+                favorites.existsByUser_IdAndResourceId(currentUser.require(authorization).getId(), resourceId));
     }
 
     /** 学习资源 id 含 `/`，路径变量捕获其余部分；去掉前导 `/` 与结尾 `/status`。 */
     private String resourceId(String resourcePath, boolean stripStatus) {
         String path = resourcePath == null ? "" : resourcePath;
-        if (path.startsWith("/")) path = path.substring(1);
-        if (stripStatus && path.endsWith("/status")) path = path.substring(0, path.length() - "/status".length());
+        if (path.startsWith("/"))
+            path = path.substring(1);
+        if (stripStatus && path.endsWith("/status"))
+            path = path.substring(0, path.length() - "/status".length());
         return path;
     }
 
@@ -98,9 +122,13 @@ public class LearningController {
      * @return 历史列表与总数
      */
     @GetMapping("/learn-history")
-    public Map<String, Object> history(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        List<Map<String, Object>> data = history.findByUser_IdOrderByBrowsedAtDesc(currentUser.require(authorization).getId()).stream()
-                .map(item -> Map.<String, Object>of("resource_id", item.getResourceId(), "browsed_at", item.getBrowsedAt() == null ? null : item.getBrowsedAt().toString())).toList();
+    public Map<String, Object> history(@RequestHeader(value = "Authorization", required = false)
+    String authorization) {
+        List<Map<String, Object>> data = history
+                .findByUser_IdOrderByBrowsedAtDesc(currentUser.require(authorization).getId()).stream()
+                .map(item -> Map.<String, Object>of("resource_id", item.getResourceId(), "browsed_at",
+                        item.getBrowsedAt() == null ? null : item.getBrowsedAt().toString()))
+                .toList();
         return Map.of("data", data, "total", data.size());
     }
 
@@ -112,7 +140,10 @@ public class LearningController {
      * @return 新记录 id 与成功标记
      */
     @PostMapping("/learn-history")
-    public Map<String, Object> record(@RequestHeader(value = "Authorization", required = false) String authorization, @RequestBody HistoryRequest request) {
+    public Map<String, Object> record(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @RequestBody
+            HistoryRequest request) {
         var item = history.save(LearnBrowsingHistory.of(currentUser.require(authorization), request.resourceId()));
         return Map.of("id", item.getId(), "resource_id", item.getResourceId(), "success", true);
     }
@@ -125,7 +156,8 @@ public class LearningController {
      */
     @DeleteMapping("/learn-history")
     @Transactional
-    public Map<String, Object> clear(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> clear(@RequestHeader(value = "Authorization", required = false)
+    String authorization) {
         history.deleteByUser_Id(currentUser.require(authorization).getId());
         return Map.of("cleared", true, "success", true);
     }
@@ -133,5 +165,8 @@ public class LearningController {
     /** 浏览记录请求体，兼容 {@code resource_id} / {@code resourceId} 字段名。 */
     public record HistoryRequest(
             @com.fasterxml.jackson.annotation.JsonProperty("resource_id")
-            @com.fasterxml.jackson.annotation.JsonAlias("resourceId") @NotBlank String resourceId) {}
+            @com.fasterxml.jackson.annotation.JsonAlias("resourceId")
+            @NotBlank
+            String resourceId) {
+    }
 }

@@ -60,7 +60,8 @@ public class User extends BaseEntity {
     @Column(name = "theme_preference", length = 10)
     private String themePreference = "system";
 
-    protected User() {}
+    protected User() {
+    }
 
     /** 创建本地注册用户。 */
     public static User local(String username, String email, String passwordHash) {
@@ -71,40 +72,95 @@ public class User extends BaseEntity {
         return user;
     }
     /** 创建第三方登录用户，绑定提供方信息与头像。 */
-    public static User external(String username, String email, String provider, String providerId, String avatarUrl) { User user = new User(); user.username = username; user.email = email; user.provider = provider; user.providerId = providerId; user.avatarUrl = avatarUrl; return user; }
+    public static User external(String username, String email, String provider, String providerId, String avatarUrl) {
+        User user = new User();
+        user.username = username;
+        user.email = email;
+        user.provider = provider;
+        user.providerId = providerId;
+        user.avatarUrl = avatarUrl;
+        return user;
+    }
 
-    public String getUsername() { return username; }
-    public String getEmail() { return email; }
-    public String getName() { return name; }
-    public String getAvatarUrl() { return avatarUrl; }
-    public String getRole() { return role; }
-    public String getProviderRole() { return providerRole; }
-    public String getLocalRole() { return localRole; }
-    public void setRole(String role) { this.role = role; }
-    public void setProviderRole(String providerRole) { this.providerRole = providerRole; }
-    public void setUsername(String username) { this.username = username; }
-    public boolean isActive() { return active; }
-    public String getPasswordHash() { return passwordHash; }
-    public String getProvider() { return provider; }
-    public String getProviderId() { return providerId; }
-    public String getThemePreference() { return themePreference; }
-    public LocalDateTime getLastLogin() { return lastLogin; }
+    public String getUsername() {
+        return username;
+    }
+    public String getEmail() {
+        return email;
+    }
+    public String getName() {
+        return name;
+    }
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+    public String getRole() {
+        return role;
+    }
+    public String getProviderRole() {
+        return providerRole;
+    }
+    public String getLocalRole() {
+        return localRole;
+    }
+    public void setRole(String role) {
+        this.role = role;
+    }
+    public void setProviderRole(String providerRole) {
+        this.providerRole = providerRole;
+    }
+    public void setUsername(String username) {
+        this.username = username;
+    }
+    public boolean isActive() {
+        return active;
+    }
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+    public String getProvider() {
+        return provider;
+    }
+    public String getProviderId() {
+        return providerId;
+    }
+    public String getThemePreference() {
+        return themePreference;
+    }
+    public LocalDateTime getLastLogin() {
+        return lastLogin;
+    }
     /** 更新个人资料；null 参数表示不修改。 */
     public void updateProfile(String name, String bio, String themePreference) {
-        if (name != null) this.name = name;
-        if (bio != null) this.bio = bio;
-        if (themePreference != null) this.themePreference = themePreference;
+        if (name != null)
+            this.name = name;
+        if (bio != null)
+            this.bio = bio;
+        if (themePreference != null)
+            this.themePreference = themePreference;
     }
     /** 返回个人简介。 */
-    public String getBio() { return bio; }
+    public String getBio() {
+        return bio;
+    }
     /** 更新邮箱。 */
-    public void setEmail(String email) { this.email = email; }
+    public void setEmail(String email) {
+        this.email = email;
+    }
     /** 记录本次登录时间。 */
-    public void markLogin() { this.lastLogin = LocalDateTime.now(); }
+    public void markLogin() {
+        this.lastLogin = LocalDateTime.now();
+    }
     /** 更新密码哈希。 */
-    public void updatePasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public void updatePasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
     /** 启用/禁用账号。 */
-    public void setActive(boolean active) { this.active = active; }
+    public void setActive(boolean active) {
+        this.active = active;
+    }
     /** 更新头像地址。 */
-    public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
 }

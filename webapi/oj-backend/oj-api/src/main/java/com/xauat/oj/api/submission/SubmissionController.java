@@ -31,15 +31,24 @@ import java.util.UUID;
 public class SubmissionController {
     /** 未完成状态：用于限制用户并发提交数。 */
     private static final List<String> PENDING_STATES = List.of("Pending", "Judging");
-    private final CurrentUser currentUser; private final ProblemRepository problems; private final SubmissionRepository submissions;
-    private final SubmissionOutboxRepository outboxes; private final StaticProblemCatalog staticCatalog; private final JudgeResultView judgeResultView;
+    private final CurrentUser currentUser;
+    private final ProblemRepository problems;
+    private final SubmissionRepository submissions;
+    private final SubmissionOutboxRepository outboxes;
+    private final StaticProblemCatalog staticCatalog;
+    private final JudgeResultView judgeResultView;
     private final SubmissionCache cache;
 
     public SubmissionController(CurrentUser currentUser, ProblemRepository problems, SubmissionRepository submissions,
-                                SubmissionOutboxRepository outboxes, StaticProblemCatalog staticCatalog, JudgeResultView judgeResultView,
-                                SubmissionCache cache) {
-        this.currentUser = currentUser; this.problems = problems; this.submissions = submissions;
-        this.outboxes = outboxes; this.staticCatalog = staticCatalog; this.judgeResultView = judgeResultView; this.cache = cache;
+            SubmissionOutboxRepository outboxes, StaticProblemCatalog staticCatalog, JudgeResultView judgeResultView,
+            SubmissionCache cache) {
+        this.currentUser = currentUser;
+        this.problems = problems;
+        this.submissions = submissions;
+        this.outboxes = outboxes;
+        this.staticCatalog = staticCatalog;
+        this.judgeResultView = judgeResultView;
+        this.cache = cache;
     }
 
     /**
@@ -52,16 +61,25 @@ public class SubmissionController {
      */
     @GetMapping({"", "/"})
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
-    public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                    @RequestParam(defaultValue = "1") Integer page,
-                                    @RequestParam(defaultValue = "20") Integer per_page) {
-        var all = submissions.findByUser_IdOrderByIdDesc(currentUser.require(authorization).getId()); long total = all.size();
+    public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @RequestParam(defaultValue = "1")
+            Integer page,
+            @RequestParam(defaultValue = "20")
+            Integer per_page) {
+        var all = submissions.findByUser_IdOrderByIdDesc(currentUser.require(authorization).getId());
+        long total = all.size();
         // 内存分页并夹取到合理区间，per_page 上限 50。
-        int safePage = Math.max(1, page); int size = Math.max(1, Math.min(per_page, 50));
-        int from = Math.min((int) total, (safePage - 1) * size); int to = Math.min((int) total, from + size);
+        int safePage = Math.max(1, page);
+        int size = Math.max(1, Math.min(per_page, 50));
+        int from = Math.min((int) total, (safePage - 1) * size);
+        int to = Math.min((int) total, from + size);
         List<Map<String, Object>> data = all.subList(from, to).stream().map(this::historyItem).toList();
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("total", total); body.put("page", safePage); body.put("per_page", size); body.put("data", data);
+        body.put("total", total);
+        body.put("page", safePage);
+        body.put("per_page", size);
+        body.put("data", data);
         return body;
     }
 
@@ -78,28 +96,39 @@ public class SubmissionController {
      */
     @PostMapping
     @Transactional
-    public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                    @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-                                    @Valid @RequestBody SubmissionRequest request) {
+    public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String idempotencyKey,
+            @Valid @RequestBody
+            SubmissionRequest request) {
         var user = currentUser.require(authorization);
-        if (idempotencyKey != null && idempotencyKey.length() > 128) return ResponseEntity.badRequest().body(Map.of("error", "幂等键过长"));
-        if (!staticCatalog.contains(request.problemId())) return ResponseEntity.notFound().build();
+        if (idempotencyKey != null && idempotencyKey.length() > 128)
+            return ResponseEntity.badRequest().body(Map.of("error", "幂等键过长"));
+        if (!staticCatalog.contains(request.problemId()))
+            return ResponseEntity.notFound().build();
         if (idempotencyKey != null) {
             // 命中幂等键直接回放原提交。
             var replay = submissions.findByUser_IdAndIdempotencyKey(user.getId(), idempotencyKey);
-            if (replay.isPresent()) return ResponseEntity.status(201).body(Map.of("id", replay.get().getId(), "status", replay.get().getStatus(), "problem_id", replay.get().getProblemId(), "idempotent_replay", true));
+            if (replay.isPresent())
+                return ResponseEntity.status(201)
+                        .body(Map.of("id", replay.get().getId(), "status", replay.get().getStatus(), "problem_id",
+                                replay.get().getProblemId(), "idempotent_replay", true));
         }
         // 并发限制：未完成提交达 3 个即拒绝。
         if (submissions.countByUser_IdAndStatusIn(user.getId(), PENDING_STATES) >= 3) {
             return ResponseEntity.status(429).body(Map.of("error", "最多同时处理 3 个提交"));
         }
         var problem = problems.findById(request.problemId()).orElse(null);
-        if (problem == null) return ResponseEntity.notFound().build();
+        if (problem == null)
+            return ResponseEntity.notFound().build();
         String jobId = UUID.randomUUID().toString();
-        Submission submission = submissions.save(Submission.create(user, problem, request.code(), request.language(), jobId, idempotencyKey));
+        Submission submission = submissions
+                .save(Submission.create(user, problem, request.code(), request.language(), jobId, idempotencyKey));
         // 写 outbox，保证 DB 提交后再投递判题队列。
         outboxes.save(SubmissionOutbox.of(submission));
-        return ResponseEntity.status(201).body(Map.of("id", submission.getId(), "status", submission.getStatus(), "problem_id", submission.getProblemId()));
+        return ResponseEntity.status(201).body(Map.of("id", submission.getId(), "status", submission.getStatus(),
+                "problem_id", submission.getProblemId()));
     }
 
     /**
@@ -112,22 +141,28 @@ public class SubmissionController {
      * @return 判题结果；不存在或无权返回 404
      */
     @GetMapping("/{id}")
-    public ResponseEntity<?> detail(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
+    public ResponseEntity<?> detail(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id) {
         var user = currentUser.require(authorization);
         String key = "cache:submission:" + id;
         var cached = cache.get(key);
         if (cached.isPresent()) {
             // 校验缓存归属，避免越权读取他人提交。
             Object owner = cached.get().get("user_id");
-            if (owner == null || owner.toString().equals(user.getId().toString()) || "manager".equalsIgnoreCase(user.getRole())) {
+            if (owner == null || owner.toString().equals(user.getId().toString())
+                    || "manager".equalsIgnoreCase(user.getRole())) {
                 return ResponseEntity.ok(cached.get());
             }
         }
-        return submissions.findById(id).filter(item -> item.getUserId().equals(user.getId()) || "manager".equalsIgnoreCase(user.getRole()))
+        return submissions.findById(id)
+                .filter(item -> item.getUserId().equals(user.getId()) || "manager".equalsIgnoreCase(user.getRole()))
                 .<ResponseEntity<?>>map(item -> {
                     Map<String, Object> body = result(item);
                     // 仅终态写入缓存，进行中的结果不缓存。
-                    if (isTerminal(item.getStatus())) cache.put(key, body);
+                    if (isTerminal(item.getStatus()))
+                        cache.put(key, body);
                     return ResponseEntity.ok(body);
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -145,7 +180,8 @@ public class SubmissionController {
         body.put("time_used", item.getTimeUsed());
         body.put("memory_used", item.getMemoryUsed());
         body.put("testcase_results", cases);
-        body.put("fail_testcase_index", item.getFailTestcaseIndex() != null ? item.getFailTestcaseIndex() : judgeResultView.failIndex(cases));
+        body.put("fail_testcase_index",
+                item.getFailTestcaseIndex() != null ? item.getFailTestcaseIndex() : judgeResultView.failIndex(cases));
         body.put("compile_error", judgeResultView.compileError(item.getStatus()));
         body.put("created_at", item.getCreatedAt() == null ? null : item.getCreatedAt().toString());
         return body;
@@ -153,8 +189,10 @@ public class SubmissionController {
 
     /** 判断状态是否为终态（非进行中的状态即为终态）。 */
     private static boolean isTerminal(String status) {
-        if (status == null) return false;
-        return !List.of("Pending", "Queued", "Judging", "Claimed", "Compiling", "Compiled", "Running", "Checking").contains(status);
+        if (status == null)
+            return false;
+        return !List.of("Pending", "Queued", "Judging", "Claimed", "Compiling", "Compiled", "Running", "Checking")
+                .contains(status);
     }
 
     /** 组装提交历史列表项，附带题目标题与难度。 */
@@ -174,7 +212,12 @@ public class SubmissionController {
     /** 普通提交请求体，兼容 {@code problem_id} / {@code problemId} 字段名。 */
     public record SubmissionRequest(
             @com.fasterxml.jackson.annotation.JsonProperty("problem_id")
-            @com.fasterxml.jackson.annotation.JsonAlias("problemId") @NotNull Integer problemId,
-            @NotBlank @jakarta.validation.constraints.Size(max = 131072) String code,
-            @NotBlank @jakarta.validation.constraints.Size(max = 50) String language) {}
+            @com.fasterxml.jackson.annotation.JsonAlias("problemId")
+            @NotNull
+            Integer problemId,
+            @NotBlank @jakarta.validation.constraints.Size(max = 131072)
+            String code,
+            @NotBlank @jakarta.validation.constraints.Size(max = 50)
+            String language) {
+    }
 }

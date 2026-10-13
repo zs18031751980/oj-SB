@@ -39,5 +39,6 @@ public interface LearnBrowsingHistoryRepository extends JpaRepository<LearnBrows
      */
     @Modifying
     @Query("delete from LearnBrowsingHistory h where h.browsedAt < :cutoff")
-    int deleteBefore(@Param("cutoff") LocalDateTime cutoff);
+    int deleteBefore(@Param("cutoff")
+    LocalDateTime cutoff);
 }

@@ -54,7 +54,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 AuthSession session = sid == null ? null : sessions.findById(sid).orElse(null);
                 boolean sessionValid = session != null && !session.isRevoked() && session.getExpiresAt() != null
                         && session.getExpiresAt().isAfter(LocalDateTime.now()) && userId.equals(session.getUserId());
-                var user = sessionValid ? users.findById(userId).filter(com.xauat.oj.core.user.domain.User::isActive).orElse(null) : null;
+                var user = sessionValid
+                        ? users.findById(userId).filter(com.xauat.oj.core.user.domain.User::isActive).orElse(null)
+                        : null;
                 if (user != null) {
                     // 角色统一转为大写并加 ROLE_ 前缀，以匹配 hasRole/hasAnyRole 的约定
                     String role = user.getRole() == null ? "MEMBER" : user.getRole().toUpperCase(Locale.ROOT);

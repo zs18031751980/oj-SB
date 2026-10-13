@@ -28,13 +28,20 @@ public class JuryReauthService {
     private final Map<Integer, String> secrets = new HashMap<>();
     private final boolean requireMfa;
 
-    public JuryReauthService(PasswordEncoder encoder, TotpService totp, JuryMFAStateRepository states, ObjectMapper mapper,
-                             @Value("${oj.mfa.totp-secrets:}") String secretsJson,
-                             @Value("${oj.mfa.require:false}") boolean requireMfa) {
-        this.encoder = encoder; this.totp = totp; this.states = states; this.requireMfa = requireMfa;
+    public JuryReauthService(PasswordEncoder encoder, TotpService totp, JuryMFAStateRepository states,
+            ObjectMapper mapper,
+            @Value("${oj.mfa.totp-secrets:}")
+            String secretsJson,
+            @Value("${oj.mfa.require:false}")
+            boolean requireMfa) {
+        this.encoder = encoder;
+        this.totp = totp;
+        this.states = states;
+        this.requireMfa = requireMfa;
         if (secretsJson != null && !secretsJson.isBlank()) {
             try {
-                Map<String, String> parsed = mapper.readValue(secretsJson, new TypeReference<Map<String, String>>() {});
+                Map<String, String> parsed = mapper.readValue(secretsJson, new TypeReference<Map<String, String>>() {
+                });
                 parsed.forEach((key, value) -> secrets.put(Integer.valueOf(key), value));
             } catch (Exception ignored) {
                 // 配置损坏时视为未配置，避免静默放过 MFA。
@@ -56,7 +63,8 @@ public class JuryReauthService {
         String secret = secrets.get(actor.getId());
         boolean configured = secret != null && !secret.isBlank();
         // 已配置密钥或强制 MFA 时，必须通过动态验证码
-        if (configured || requireMfa) verifyTotp(actor, code, secret);
+        if (configured || requireMfa)
+            verifyTotp(actor, code, secret);
         if (actor.getPasswordHash() != null) {
             if (password == null || !encoder.matches(password, actor.getPasswordHash())) {
                 throw new com.xauat.oj.common.exception.OjException("FORBIDDEN", "裁判密码重新认证失败");
@@ -68,9 +76,13 @@ public class JuryReauthService {
     }
 
     /** 该用户是否已配置 TOTP 密钥。 */
-    public boolean mfaConfigured(Integer userId) { return secrets.containsKey(userId); }
+    public boolean mfaConfigured(Integer userId) {
+        return secrets.containsKey(userId);
+    }
     /** 全局是否强制要求 MFA。 */
-    public boolean requireMfa() { return requireMfa; }
+    public boolean requireMfa() {
+        return requireMfa;
+    }
 
     /**
      * 校验 TOTP 并防止同一时间窗口验证码被重放。

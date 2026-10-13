@@ -41,11 +41,16 @@ public class AuthController {
 
     /** 注入用户、密码编码器、JWT、会话、OAuth 供应商与账号维度限流器等依赖。 */
     public AuthController(UserRepository users, PasswordEncoder passwordEncoder, JwtService jwtService,
-                          AuthSessionRepository sessions, AuthSessionService sessionService,
-                          OAuthProviderRegistry providers, CurrentUser currentUser, AccountRateLimiter rateLimiter) {
-        this.users = users; this.passwordEncoder = passwordEncoder; this.jwtService = jwtService;
-        this.sessions = sessions; this.sessionService = sessionService; this.providers = providers;
-        this.currentUser = currentUser; this.rateLimiter = rateLimiter;
+            AuthSessionRepository sessions, AuthSessionService sessionService,
+            OAuthProviderRegistry providers, CurrentUser currentUser, AccountRateLimiter rateLimiter) {
+        this.users = users;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+        this.sessions = sessions;
+        this.sessionService = sessionService;
+        this.providers = providers;
+        this.currentUser = currentUser;
+        this.rateLimiter = rateLimiter;
     }
 
     /**
@@ -56,12 +61,14 @@ public class AuthController {
      * @return 成功返回含访问令牌与用户信息的主体，失败分别返回 429/401
      */
     @PostMapping("/login/password")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
+    public ResponseEntity<?> login(@Valid @RequestBody
+    LoginRequest request, HttpServletResponse response) {
         if (!rateLimiter.allow(request.identifier())) {
             return ResponseEntity.status(429).body(Map.of("error", "请求过于频繁，请稍后再试"));
         }
         // identifier 可填用户名或邮箱，依次回退查找；统一走同一套校验避免暴露账号是否存在
-        User user = users.findByUsername(request.identifier()).orElseGet(() -> users.findByEmail(request.identifier()).orElse(null));
+        User user = users.findByUsername(request.identifier())
+                .orElseGet(() -> users.findByEmail(request.identifier()).orElse(null));
         if (user == null || !user.isActive() || user.getPasswordHash() == null ||
                 !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             // 账号不存在、未激活、无密码哈希与密码错误返回同一提示，防止账号枚举
@@ -75,7 +82,8 @@ public class AuthController {
         users.save(user);
         var issued = sessionService.issue(user);
         // remember 缺省视为 true；为 false 时签发会话级 Cookie（关闭浏览器即失效）
-        sessionService.setRefreshCookie(response, issued.refreshToken(), request.remember() == null || request.remember());
+        sessionService.setRefreshCookie(response, issued.refreshToken(),
+                request.remember() == null || request.remember());
         return ResponseEntity.ok(loginBody(user, issued));
     }
 
@@ -86,15 +94,19 @@ public class AuthController {
      * @return 授权跳转地址；provider 为空或不支持时返回 400
      */
     @PostMapping("/login")
-    public ResponseEntity<?> loginAlias(@RequestBody LoginAliasRequest request) {
+    public ResponseEntity<?> loginAlias(@RequestBody
+    LoginAliasRequest request) {
         if (request.provider() == null || request.provider().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", "请输入登录方式"));
         }
         if (!providers.configured(request.provider())) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "不支持的登录方式：" + request.provider()));
+            return ResponseEntity.badRequest()
+                    .body(Map.of("success", false, "error", "不支持的登录方式：" + request.provider()));
         }
-        String authorizationUrl = providers.authorizationUrl(request.provider(), request.redirectUri(), UUID.randomUUID().toString());
-        if (authorizationUrl == null) return ResponseEntity.internalServerError().body(Map.of("success", false, "error", "创建授权地址失败"));
+        String authorizationUrl = providers.authorizationUrl(request.provider(), request.redirectUri(),
+                UUID.randomUUID().toString());
+        if (authorizationUrl == null)
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", "创建授权地址失败"));
         return ResponseEntity.ok(Map.of("success", true, "authorization_url", authorizationUrl));
     }
 
@@ -105,9 +117,11 @@ public class AuthController {
      * @return 有效返回 {@code valid=true} 与用户信息，否则 401
      */
     @GetMapping("/verify")
-    public ResponseEntity<?> verify(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public ResponseEntity<?> verify(@RequestHeader(value = "Authorization", required = false)
+    String authorization) {
         User user = currentUser.optional(authorization);
-        if (user == null) return ResponseEntity.status(401).body(Map.of("valid", false, "error", "令牌无效或已过期"));
+        if (user == null)
+            return ResponseEntity.status(401).body(Map.of("valid", false, "error", "令牌无效或已过期"));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("valid", true);
         body.put("user_info", sessionService.userInfo(user));
@@ -136,10 +150,13 @@ public class AuthController {
      * @return 成功返回主题，非法值返回 400
      */
     @PatchMapping("/theme")
-    public ResponseEntity<?> theme(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                   @Valid @RequestBody ThemeRequest request) {
+    public ResponseEntity<?> theme(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @Valid @RequestBody
+            ThemeRequest request) {
         if (!Set.of("light", "dark", "system").contains(request.theme())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "invalid theme_preference, must be light, dark, or system"));
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "invalid theme_preference, must be light, dark, or system"));
         }
         User user = currentUser.require(authorization);
         user.updateProfile(null, null, request.theme());
@@ -156,11 +173,16 @@ public class AuthController {
      * @return 固定成功消息
      */
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@CookieValue(value = AuthSessionService.REFRESH_COOKIE, required = false) String refreshToken,
-                                    @RequestHeader(value = "Authorization", required = false) String authorization,
-                                    HttpServletResponse response) {
-        if (refreshToken != null) revokeByRefreshToken(refreshToken);
-        if (authorization != null && authorization.startsWith("Bearer ")) revokeByAccessToken(authorization.substring(7));
+    public ResponseEntity<?> logout(
+            @CookieValue(value = AuthSessionService.REFRESH_COOKIE, required = false)
+            String refreshToken,
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization,
+            HttpServletResponse response) {
+        if (refreshToken != null)
+            revokeByRefreshToken(refreshToken);
+        if (authorization != null && authorization.startsWith("Bearer "))
+            revokeByAccessToken(authorization.substring(7));
         sessionService.clearRefreshCookie(response);
         return ResponseEntity.ok(Map.of("message", "logout successful"));
     }
@@ -179,15 +201,23 @@ public class AuthController {
      */
     @PostMapping("/refresh")
     @org.springframework.transaction.annotation.Transactional
-    public ResponseEntity<?> refresh(@CookieValue(value = AuthSessionService.REFRESH_COOKIE, required = false) String refreshToken,
-                                     @RequestHeader(value = "Idempotency-Key", required = false) String requestId,
-                                     @RequestBody(required = false) RememberRequest body,
-                                     HttpServletResponse response) {
-        if (refreshToken == null || refreshToken.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "refresh_token is required"));
+    public ResponseEntity<?> refresh(
+            @CookieValue(value = AuthSessionService.REFRESH_COOKIE, required = false)
+            String refreshToken,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String requestId,
+            @RequestBody(required = false)
+            RememberRequest body,
+            HttpServletResponse response) {
+        if (refreshToken == null || refreshToken.isBlank())
+            return ResponseEntity.badRequest().body(Map.of("error", "refresh_token is required"));
         String sid;
         // 先取出会话 id；解析失败直接按无效令牌处理，不泄露具体失败原因
-        try { sid = jwtService.parseRefresh(refreshToken).get("sid", String.class); }
-        catch (RuntimeException exception) { return ResponseEntity.badRequest().body(Map.of("error", "refresh_token is invalid or expired")); }
+        try {
+            sid = jwtService.parseRefresh(refreshToken).get("sid", String.class);
+        } catch (RuntimeException exception) {
+            return ResponseEntity.badRequest().body(Map.of("error", "refresh_token is invalid or expired"));
+        }
         // 行级锁读取，防止并发刷新同一会话造成竞态
         AuthSession session = sessions.findForUpdateById(sid).orElse(null);
         if (session == null || session.isRevoked() || session.getExpiresAt() == null
@@ -198,7 +228,8 @@ public class AuthController {
         User user = users.findById(session.getUserId()).filter(User::isActive).orElse(null);
         if (user == null) {
             // 会话存在但用户缺失/停用：撤销会话并清 Cookie，避免留下孤儿会话
-            session.revoke(); sessions.save(session);
+            session.revoke();
+            sessions.save(session);
             sessionService.clearRefreshCookie(response);
             return ResponseEntity.badRequest().body(Map.of("error", "refresh_token is invalid or expired"));
         }
@@ -211,7 +242,8 @@ public class AuthController {
         }
         // 摘要不匹配说明这不是当前会话的有效刷新令牌（可能已轮换），按重放处理并撤销
         if (!digest.equals(session.getRefreshHash())) {
-            session.revoke(); sessions.save(session);
+            session.revoke();
+            sessions.save(session);
             sessionService.clearRefreshCookie(response);
             return ResponseEntity.badRequest().body(Map.of("error", "refresh_token is invalid or expired"));
         }
@@ -225,16 +257,24 @@ public class AuthController {
     private void revokeByRefreshToken(String refreshToken) {
         try {
             String sid = jwtService.parseRefresh(refreshToken).get("sid", String.class);
-            sessions.findById(sid).ifPresent(session -> { session.revoke(); sessions.save(session); });
-        } catch (RuntimeException ignored) { }
+            sessions.findById(sid).ifPresent(session -> {
+                session.revoke();
+                sessions.save(session);
+            });
+        } catch (RuntimeException ignored) {
+        }
     }
 
     /** 按访问令牌中的会话 id 撤销会话；令牌不可解析时静默忽略。 */
     private void revokeByAccessToken(String accessToken) {
         try {
             String sid = jwtService.parseAccess(accessToken).get("sid", String.class);
-            sessions.findById(sid).ifPresent(session -> { session.revoke(); sessions.save(session); });
-        } catch (RuntimeException ignored) { }
+            sessions.findById(sid).ifPresent(session -> {
+                session.revoke();
+                sessions.save(session);
+            });
+        } catch (RuntimeException ignored) {
+        }
     }
 
     /** 组装密码登录响应：同时提供扁平字段与嵌套 tokens，兼容新旧前端。 */
@@ -263,11 +303,20 @@ public class AuthController {
     }
 
     /** 密码登录请求；identifier 兼容旧字段名 username。 */
-    public record LoginRequest(@JsonAlias({"username"}) @NotBlank String identifier, @NotBlank String password, Boolean remember) {}
+    public record LoginRequest(@JsonAlias( {
+            "username"}) @NotBlank
+        String identifier, @NotBlank
+        String password, Boolean remember){
+    }
     /** API 客户端发起 OAuth 登录的请求。 */
-    public record LoginAliasRequest(String provider, String redirectUri) {}
+    public record LoginAliasRequest(String provider, String redirectUri) {
+    }
     /** 刷新时是否保持长期 Cookie 的请求体。 */
-    public record RememberRequest(Boolean remember) {}
+    public record RememberRequest(Boolean remember) {
+    }
     /** 主题更新请求；theme 兼容旧字段名 theme_preference。 */
-    public record ThemeRequest(@JsonAlias({"theme", "theme_preference"}) @NotBlank String theme) {}
+    public record ThemeRequest(@JsonAlias( {
+            "theme", "theme_preference"}) @NotBlank
+        String theme){
+    }
 }

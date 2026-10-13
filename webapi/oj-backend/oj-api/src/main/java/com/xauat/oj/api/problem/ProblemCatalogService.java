@@ -29,8 +29,8 @@ public class ProblemCatalogService {
     private final ObjectMapper mapper;
 
     public ProblemCatalogService(StaticProblemCatalog staticCatalog, ContestRepository contests,
-                                 ContestProblemRepository contestProblems, ContestTestcaseRepository contestTestcases,
-                                 ObjectMapper mapper) {
+            ContestProblemRepository contestProblems, ContestTestcaseRepository contestTestcases,
+            ObjectMapper mapper) {
         this.staticCatalog = staticCatalog;
         this.contests = contests;
         this.contestProblems = contestProblems;
@@ -66,7 +66,8 @@ public class ProblemCatalogService {
      */
     public Optional<Map<String, Object>> detail(Integer id) {
         Map<String, Object> staticProblem = staticCatalog.find(id).orElse(null);
-        if (staticProblem != null) return Optional.of(staticDetail(staticProblem));
+        if (staticProblem != null)
+            return Optional.of(staticDetail(staticProblem));
         // 库内题目 id = 编码基数 + 比赛题目主键，避免与静态题号冲突。
         if (id != null && id >= StaticProblemCatalog.LIBRARY_ID_BASE) {
             int contestProblemId = id - StaticProblemCatalog.LIBRARY_ID_BASE;
@@ -80,7 +81,8 @@ public class ProblemCatalogService {
 
     /** 供题库提交使用：校验题目存在且所属比赛已结束。 */
     public Optional<ContestProblem> findLibraryProblem(Integer contestProblemId) {
-        if (contestProblemId == null) return Optional.empty();
+        if (contestProblemId == null)
+            return Optional.empty();
         return contestProblems.findById(contestProblemId)
                 .filter(problem -> contests.findById(problem.getContestId()).filter(this::isEnded).isPresent());
     }
@@ -92,10 +94,13 @@ public class ProblemCatalogService {
      * @return 已结束返回 true；草稿/就绪/取消或非公开比赛返回 false
      */
     public boolean isEnded(Contest contest) {
-        if (contest == null || !contest.isPublicContest()) return false;
+        if (contest == null || !contest.isPublicContest())
+            return false;
         String lifecycle = contest.getLifecycleState();
-        if (lifecycle != null && List.of("DRAFT", "READY", "CANCELLED").contains(lifecycle)) return false;
-        if ("FINALIZED".equals(lifecycle)) return true;
+        if (lifecycle != null && List.of("DRAFT", "READY", "CANCELLED").contains(lifecycle))
+            return false;
+        if ("FINALIZED".equals(lifecycle))
+            return true;
         LocalDateTime end = contest.getEndTime();
         return end != null && !end.isAfter(LocalDateTime.now());
     }
@@ -160,7 +165,8 @@ public class ProblemCatalogService {
         detail.put("inputFormat", problem.getInputDesc());
         detail.put("outputFormat", problem.getOutputDesc());
         detail.put("samples", parseSamples(problem.getSamples()));
-        detail.put("testCaseCount", contestTestcases.findByContestProblem_IdOrderBySortOrderAscIdAsc(problem.getId()).size());
+        detail.put("testCaseCount",
+                contestTestcases.findByContestProblem_IdOrderBySortOrderAscIdAsc(problem.getId()).size());
         detail.put("isLibrary", true);
         detail.put("contestProblemId", problem.getId());
         detail.put("contestId", contest.getId());
@@ -170,8 +176,11 @@ public class ProblemCatalogService {
 
     private List<Map<String, Object>> parseSamples(String raw) {
         try {
-            if (raw == null || raw.isBlank()) return List.of();
-            return mapper.readValue(raw, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+            if (raw == null || raw.isBlank())
+                return List.of();
+            return mapper.readValue(raw,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {
+                    });
         } catch (Exception exception) {
             return List.of();
         }

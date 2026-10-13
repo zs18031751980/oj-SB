@@ -15,7 +15,9 @@ import java.util.Set;
 public class ContestPermissionService {
     private final ContestRoleRepository roles;
 
-    public ContestPermissionService(ContestRoleRepository roles) { this.roles = roles; }
+    public ContestPermissionService(ContestRoleRepository roles) {
+        this.roles = roles;
+    }
 
     /**
      * 判断用户在指定比赛是否拥有某项能力。
@@ -28,10 +30,13 @@ public class ContestPermissionService {
      */
     public boolean allowed(Integer contestId, User actor, String capability) {
         // 匿名或已停用账号一律拒绝
-        if (actor == null || !actor.isActive()) return false;
-        if ("manager".equals(actor.getRole())) return true;
+        if (actor == null || !actor.isActive())
+            return false;
+        if ("manager".equals(actor.getRole()))
+            return true;
         ContestRole role = roles.findByContest_IdAndUser_Id(contestId, actor.getId()).orElse(null);
-        if (role == null) return false;
+        if (role == null)
+            return false;
         // 比赛内角色 → 能力集合：director 全权，jury 可答疑与复判，setter 管题包，operator 只看健康度
         Set<String> grants = switch (role.getRole() == null ? "none" : role.getRole()) {
             case "director" -> Set.of("control", "jury", "rejudge", "package");

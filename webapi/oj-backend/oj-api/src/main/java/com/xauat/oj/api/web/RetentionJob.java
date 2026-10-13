@@ -21,8 +21,8 @@ import java.util.List;
 @Component
 public class RetentionJob {
     private static final Logger log = LoggerFactory.getLogger(RetentionJob.class);
-    private static final List<String> TERMINAL_STATUSES =
-            List.of("AC", "WA", "CE", "TLE", "MLE", "OLE", "RE", "SIGSEGV", "SIGSYS", "Partial");
+    private static final List<String> TERMINAL_STATUSES = List.of("AC", "WA", "CE", "TLE", "MLE", "OLE", "RE",
+            "SIGSEGV", "SIGSYS", "Partial");
 
     private final JudgeDeadLetterRepository deadLetters;
     private final LearnBrowsingHistoryRepository browsingHistory;
@@ -38,13 +38,20 @@ public class RetentionJob {
      * @param outboxDays     已派发 outbox 保留天数
      */
     public RetentionJob(JudgeDeadLetterRepository deadLetters, LearnBrowsingHistoryRepository browsingHistory,
-                        SubmissionOutboxRepository submissionOutboxes, ContestJudgeOutboxRepository contestOutboxes,
-                        @Value("${oj.retention.dead-letter-days:30}") int deadLetterDays,
-                        @Value("${oj.retention.browsing-days:180}") int browsingDays,
-                        @Value("${oj.retention.outbox-days:7}") int outboxDays) {
-        this.deadLetters = deadLetters; this.browsingHistory = browsingHistory;
-        this.submissionOutboxes = submissionOutboxes; this.contestOutboxes = contestOutboxes;
-        this.deadLetterDays = deadLetterDays; this.browsingDays = browsingDays; this.outboxDays = outboxDays;
+            SubmissionOutboxRepository submissionOutboxes, ContestJudgeOutboxRepository contestOutboxes,
+            @Value("${oj.retention.dead-letter-days:30}")
+            int deadLetterDays,
+            @Value("${oj.retention.browsing-days:180}")
+            int browsingDays,
+            @Value("${oj.retention.outbox-days:7}")
+            int outboxDays) {
+        this.deadLetters = deadLetters;
+        this.browsingHistory = browsingHistory;
+        this.submissionOutboxes = submissionOutboxes;
+        this.contestOutboxes = contestOutboxes;
+        this.deadLetterDays = deadLetterDays;
+        this.browsingDays = browsingDays;
+        this.outboxDays = outboxDays;
     }
 
     /**

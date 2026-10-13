@@ -27,7 +27,8 @@ import java.util.List;
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
-    @Value("${oj.upload.avatar-dir:./data/avatars}") private String avatarDir;
+    @Value("${oj.upload.avatar-dir:./data/avatars}")
+    private String avatarDir;
 
     /**
      * 将本地头像目录映射到 {@code /uploads/avatars/**}。
@@ -52,29 +53,44 @@ public class WebConfig implements WebMvcConfigurer {
     /** 注册 CSRF 保护过滤器（order=1，仅 /auth/*），要求写操作携带 X-CSRF-Protection 头。 */
     @Bean
     FilterRegistrationBean<CsrfProtectionFilter> csrfProtectionFilter() {
-        FilterRegistrationBean<CsrfProtectionFilter> registration = new FilterRegistrationBean<>(new CsrfProtectionFilter());
-        registration.setOrder(1); registration.addUrlPatterns("/auth/*"); return registration;
+        FilterRegistrationBean<CsrfProtectionFilter> registration = new FilterRegistrationBean<>(
+                new CsrfProtectionFilter());
+        registration.setOrder(1);
+        registration.addUrlPatterns("/auth/*");
+        return registration;
     }
 
     /** 注册来源校验过滤器（order=2，全部路径），限制浏览器跨站写请求。 */
     @Bean
-    FilterRegistrationBean<OriginValidationFilter> originValidationFilter(@Value("${oj.cors.origins:}") String origins) {
-        FilterRegistrationBean<OriginValidationFilter> registration = new FilterRegistrationBean<>(new OriginValidationFilter(origins));
-        registration.setOrder(2); registration.addUrlPatterns("/*"); return registration;
+    FilterRegistrationBean<OriginValidationFilter> originValidationFilter(
+            @Value("${oj.cors.origins:}")
+            String origins) {
+        FilterRegistrationBean<OriginValidationFilter> registration = new FilterRegistrationBean<>(
+                new OriginValidationFilter(origins));
+        registration.setOrder(2);
+        registration.addUrlPatterns("/*");
+        return registration;
     }
 
     /** 注册安全响应头过滤器（order=3，全部路径）。 */
     @Bean
     FilterRegistrationBean<SecurityHeadersFilter> securityHeadersFilter() {
-        FilterRegistrationBean<SecurityHeadersFilter> registration = new FilterRegistrationBean<>(new SecurityHeadersFilter());
-        registration.setOrder(3); registration.addUrlPatterns("/*"); return registration;
+        FilterRegistrationBean<SecurityHeadersFilter> registration = new FilterRegistrationBean<>(
+                new SecurityHeadersFilter());
+        registration.setOrder(3);
+        registration.addUrlPatterns("/*");
+        return registration;
     }
 
     /** 注册指标端点认证过滤器（order=4，仅 /actuator/prometheus）。 */
     @Bean
-    FilterRegistrationBean<MetricsAuthFilter> metricsAuthFilter(@Value("${oj.metrics.token:}") String token) {
-        FilterRegistrationBean<MetricsAuthFilter> registration = new FilterRegistrationBean<>(new MetricsAuthFilter(token));
-        registration.setOrder(4); registration.addUrlPatterns("/actuator/prometheus"); return registration;
+    FilterRegistrationBean<MetricsAuthFilter> metricsAuthFilter(@Value("${oj.metrics.token:}")
+    String token) {
+        FilterRegistrationBean<MetricsAuthFilter> registration = new FilterRegistrationBean<>(
+                new MetricsAuthFilter(token));
+        registration.setOrder(4);
+        registration.addUrlPatterns("/actuator/prometheus");
+        return registration;
     }
 
     /** 学习资源 id 含 `/`，前端以 %2F 传输；让 Tomcat 解码编码斜杠。 */
@@ -85,10 +101,13 @@ public class WebConfig implements WebMvcConfigurer {
 
     /** 与旧后端一致：仅对白名单来源返回 CORS 头，支持携带 Cookie。 */
     @Bean
-    CorsConfigurationSource corsConfigurationSource(@Value("${oj.cors.origins:}") String origins) {
+    CorsConfigurationSource corsConfigurationSource(@Value("${oj.cors.origins:}")
+    String origins) {
         CorsConfiguration config = new CorsConfiguration();
-        List<String> allowed = Arrays.stream(origins.split(",")).map(String::trim).filter(value -> !value.isBlank()).toList();
-        if (!allowed.isEmpty()) config.setAllowedOrigins(allowed);
+        List<String> allowed = Arrays.stream(origins.split(",")).map(String::trim).filter(value -> !value.isBlank())
+                .toList();
+        if (!allowed.isEmpty())
+            config.setAllowedOrigins(allowed);
         config.setAllowedHeaders(List.of("Content-Type", "Authorization", "Idempotency-Key", "X-CSRF-Protection"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowCredentials(true);

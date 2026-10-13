@@ -12,20 +12,33 @@ import jakarta.persistence.*;
 @Table(name = "testcases")
 public class Testcase extends BaseEntity {
     /** 所属题目。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "problem_id") private Problem problem;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "problem_id")
+    private Problem problem;
     /** 测试点输入数据。 */
-    @Column(name = "input_data", nullable = false, columnDefinition = "text") private String inputData;
+    @Column(name = "input_data", nullable = false, columnDefinition = "text")
+    private String inputData;
     /** 测试点期望输出数据。 */
-    @Column(name = "output_data", nullable = false, columnDefinition = "text") private String outputData;
+    @Column(name = "output_data", nullable = false, columnDefinition = "text")
+    private String outputData;
     /** 是否为公开样例。 */
-    @Column(name = "is_sample") private boolean sample;
+    @Column(name = "is_sample")
+    private boolean sample;
     /** 测试点顺序。 */
-    @Column(name = "sort_order") private int sortOrder;
-    protected Testcase() {}
+    @Column(name = "sort_order")
+    private int sortOrder;
+    protected Testcase() {
+    }
     /** 返回输入数据。 */
-    public String getInputData() { return inputData; }
+    public String getInputData() {
+        return inputData;
+    }
     /** 返回期望输出。 */
-    public String getOutputData() { return outputData; }
+    public String getOutputData() {
+        return outputData;
+    }
     /** 返回排序序号。 */
-    public int getSortOrder() { return sortOrder; }
+    public int getSortOrder() {
+        return sortOrder;
+    }
 }

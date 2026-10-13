@@ -35,8 +35,10 @@ public class JsonLogEncoder extends EncoderBase<ILoggingEvent> {
             log.put("message", redact(event.getFormattedMessage()));
             // 合并 MDC 便于把请求 id 等上下文带入结构化日志
             Map<String, String> mdc = event.getMDCPropertyMap();
-            if (mdc != null && !mdc.isEmpty()) log.put("mdc", mdc);
-            if (event.getThrowableProxy() != null) log.put("stack", ThrowableProxyUtil.asString(event.getThrowableProxy()));
+            if (mdc != null && !mdc.isEmpty())
+                log.put("mdc", mdc);
+            if (event.getThrowableProxy() != null)
+                log.put("stack", ThrowableProxyUtil.asString(event.getThrowableProxy()));
             return (MAPPER.writeValueAsString(log) + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
         } catch (Exception exception) {
             // 日志编码本身绝不能成为服务故障源，失败时退回纯文本
@@ -51,7 +53,8 @@ public class JsonLogEncoder extends EncoderBase<ILoggingEvent> {
      * @return 脱敏后消息
      */
     private String redact(String message) {
-        if (message == null) return "";
+        if (message == null)
+            return "";
         Matcher matcher = SENSITIVE.matcher(message);
         StringBuilder result = new StringBuilder();
         int last = 0;
@@ -66,9 +69,13 @@ public class JsonLogEncoder extends EncoderBase<ILoggingEvent> {
 
     /** 无头部字节。 */
     @Override
-    public byte[] headerBytes() { return null; }
+    public byte[] headerBytes() {
+        return null;
+    }
 
     /** 无尾部字节。 */
     @Override
-    public byte[] footerBytes() { return null; }
+    public byte[] footerBytes() {
+        return null;
+    }
 }

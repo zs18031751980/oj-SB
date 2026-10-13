@@ -14,24 +14,46 @@ import jakarta.persistence.*;
 @Table(name = "contest_judge_outbox")
 public class ContestJudgeOutbox extends BaseEntity {
     /** 关联的比赛提交（一对一）。 */
-    @OneToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "submission_id", unique = true) private ContestSubmission submission;
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "submission_id", unique = true)
+    private ContestSubmission submission;
     /** 派发状态，默认 PENDING。 */
-    @Column(nullable = false, length = 20) private String state = "PENDING";
+    @Column(nullable = false, length = 20)
+    private String state = "PENDING";
     /** 派发尝试次数。 */
-    @Column(name = "dispatch_attempts") private int dispatchAttempts;
+    @Column(name = "dispatch_attempts")
+    private int dispatchAttempts;
     /** 最近一次派发失败的错误信息。 */
-    @Column(name = "last_error", columnDefinition = "text") private String lastError;
+    @Column(name = "last_error", columnDefinition = "text")
+    private String lastError;
     /** 派发成功时间。 */
-    @Column(name = "dispatched_at") private java.time.LocalDateTime dispatchedAt;
-    protected ContestJudgeOutbox() {}
+    @Column(name = "dispatched_at")
+    private java.time.LocalDateTime dispatchedAt;
+    protected ContestJudgeOutbox() {
+    }
     /** 为指定提交创建发件箱记录。 */
-    public static ContestJudgeOutbox of(ContestSubmission submission) { ContestJudgeOutbox item = new ContestJudgeOutbox(); item.submission = submission; return item; }
+    public static ContestJudgeOutbox of(ContestSubmission submission) {
+        ContestJudgeOutbox item = new ContestJudgeOutbox();
+        item.submission = submission;
+        return item;
+    }
     /** 返回关联提交。 */
-    public ContestSubmission getSubmission() { return submission; }
+    public ContestSubmission getSubmission() {
+        return submission;
+    }
     /** 返回派发状态。 */
-    public String getState() { return state; }
+    public String getState() {
+        return state;
+    }
     /** 标记为已派发并记录时间。 */
-    public void markDispatched() { state = "DISPATCHED"; dispatchedAt = java.time.LocalDateTime.now(); }
+    public void markDispatched() {
+        state = "DISPATCHED";
+        dispatchedAt = java.time.LocalDateTime.now();
+    }
     /** 记录派发失败：回到 PENDING、累加尝试次数并保存错误。 */
-    public void markFailed(String error) { state = "PENDING"; dispatchAttempts++; lastError = error; }
+    public void markFailed(String error) {
+        state = "PENDING";
+        dispatchAttempts++;
+        lastError = error;
+    }
 }

@@ -27,7 +27,8 @@ public class RefreshRecoveryCipher {
      * @param secret 应用 JWT 密钥
      * @throws IllegalStateException 密钥派生失败时抛出
      */
-    public RefreshRecoveryCipher(@Value("${oj.auth.jwt-secret}") String secret) {
+    public RefreshRecoveryCipher(@Value("${oj.auth.jwt-secret}")
+    String secret) {
         try {
             // 加入固定用途前缀做域分离：即使 JWT 密钥泄露，也不能直接解出恢复材料
             byte[] derived = MessageDigest.getInstance("SHA-256")

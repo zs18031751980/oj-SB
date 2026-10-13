@@ -17,7 +17,8 @@ import jakarta.persistence.UniqueConstraint;
  * 保证同一用户对同一题目只能收藏一次。</p>
  */
 @Entity
-@Table(name = "favorites", uniqueConstraints = @UniqueConstraint(name = "uq_favorites_user_problem", columnNames = {"user_id", "problem_id"}))
+@Table(name = "favorites", uniqueConstraints = @UniqueConstraint(name = "uq_favorites_user_problem", columnNames = {
+        "user_id", "problem_id"}))
 public class Favorite extends BaseEntity {
     /** 收藏用户。 */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -27,9 +28,17 @@ public class Favorite extends BaseEntity {
     @Column(name = "problem_id", nullable = false)
     private Integer problemId;
 
-    protected Favorite() {}
+    protected Favorite() {
+    }
     /** 构建收藏关系。 */
-    public static Favorite of(User user, Integer problemId) { Favorite favorite = new Favorite(); favorite.user = user; favorite.problemId = problemId; return favorite; }
+    public static Favorite of(User user, Integer problemId) {
+        Favorite favorite = new Favorite();
+        favorite.user = user;
+        favorite.problemId = problemId;
+        return favorite;
+    }
     /** 返回题目 ID。 */
-    public Integer getProblemId() { return problemId; }
+    public Integer getProblemId() {
+        return problemId;
+    }
 }

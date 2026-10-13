@@ -17,7 +17,9 @@ import jakarta.persistence.UniqueConstraint;
  * 保证同一用户对同一资源只能收藏一次。</p>
  */
 @Entity
-@Table(name = "learn_favorites", uniqueConstraints = @UniqueConstraint(name = "uq_learn_favorites_user_resource", columnNames = {"user_id", "resource_id"}))
+@Table(name = "learn_favorites", uniqueConstraints =
+        @UniqueConstraint(name = "uq_learn_favorites_user_resource", columnNames = {
+        "user_id", "resource_id"}))
 public class LearnFavorite extends BaseEntity {
     /** 收藏用户。 */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -27,9 +29,17 @@ public class LearnFavorite extends BaseEntity {
     @Column(name = "resource_id", nullable = false, length = 100)
     private String resourceId;
 
-    protected LearnFavorite() {}
+    protected LearnFavorite() {
+    }
     /** 构建收藏关系。 */
-    public static LearnFavorite of(User user, String resourceId) { LearnFavorite favorite = new LearnFavorite(); favorite.user = user; favorite.resourceId = resourceId; return favorite; }
+    public static LearnFavorite of(User user, String resourceId) {
+        LearnFavorite favorite = new LearnFavorite();
+        favorite.user = user;
+        favorite.resourceId = resourceId;
+        return favorite;
+    }
     /** 返回资源标识。 */
-    public String getResourceId() { return resourceId; }
+    public String getResourceId() {
+        return resourceId;
+    }
 }

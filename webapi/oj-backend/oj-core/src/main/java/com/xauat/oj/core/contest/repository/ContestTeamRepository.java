@@ -6,7 +6,7 @@ import java.util.List;
  * 赛事队伍仓储。
  * <p>管理赛事队伍实体 {@link ContestTeam} 的持久化与按赛事查询。</p>
  */
-public interface ContestTeamRepository extends JpaRepository<ContestTeam,Integer> {
+public interface ContestTeamRepository extends JpaRepository<ContestTeam, Integer> {
     /**
      * 查询某赛事的全部队伍，按主键正序。
      *

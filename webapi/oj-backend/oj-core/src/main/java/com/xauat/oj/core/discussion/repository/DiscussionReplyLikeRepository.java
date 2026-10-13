@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * 讨论回复点赞仓储。
  * <p>管理讨论回复点赞实体 {@link DiscussionReplyLike}，用于记录用户对回复的点赞关系。</p>
  */
-public interface DiscussionReplyLikeRepository extends JpaRepository<DiscussionReplyLike,Integer> {
+public interface DiscussionReplyLikeRepository extends JpaRepository<DiscussionReplyLike, Integer> {
     /**
      * 判断指定用户是否已点赞某条回复。
      *

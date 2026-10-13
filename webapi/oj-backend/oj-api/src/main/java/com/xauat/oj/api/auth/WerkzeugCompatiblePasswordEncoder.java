@@ -44,8 +44,10 @@ public class WerkzeugCompatiblePasswordEncoder implements PasswordEncoder {
      */
     @Override
     public boolean matches(CharSequence rawPassword, String encodedPassword) {
-        if (rawPassword == null || encodedPassword == null || encodedPassword.isBlank()) return false;
-        if (isBcrypt(encodedPassword)) return bcrypt.matches(rawPassword, encodedPassword);
+        if (rawPassword == null || encodedPassword == null || encodedPassword.isBlank())
+            return false;
+        if (isBcrypt(encodedPassword))
+            return bcrypt.matches(rawPassword, encodedPassword);
         return matchesWerkzeug(rawPassword.toString(), encodedPassword);
     }
 
@@ -68,7 +70,8 @@ public class WerkzeugCompatiblePasswordEncoder implements PasswordEncoder {
     /** 解析并校验 Werkzeug 风格的 {@code method$salt$hash} 结构。 */
     private boolean matchesWerkzeug(String rawPassword, String storedHash) {
         String[] parts = storedHash.split("\\$", 3);
-        if (parts.length != 3) return false;
+        if (parts.length != 3)
+            return false;
         String method = parts[0];
         String salt = parts[1];
         String expected = parts[2];

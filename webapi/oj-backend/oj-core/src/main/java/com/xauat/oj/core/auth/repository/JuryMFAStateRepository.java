@@ -25,5 +25,6 @@ public interface JuryMFAStateRepository extends JpaRepository<JuryMFAState, Inte
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from JuryMFAState s where s.userId = :userId")
-    Optional<JuryMFAState> findForUpdateByUserId(@Param("userId") Integer userId);
+    Optional<JuryMFAState> findForUpdateByUserId(@Param("userId")
+    Integer userId);
 }

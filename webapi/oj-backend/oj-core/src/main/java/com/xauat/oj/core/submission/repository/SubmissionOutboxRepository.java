@@ -42,7 +42,8 @@ public interface SubmissionOutboxRepository extends JpaRepository<SubmissionOutb
      */
     @Modifying
     @Query("delete from SubmissionOutbox o where o.state = 'DISPATCHED' and o.updatedAt < :cutoff")
-    int deleteDispatchedBefore(@Param("cutoff") LocalDateTime cutoff);
+    int deleteDispatchedBefore(@Param("cutoff")
+    LocalDateTime cutoff);
 
     /**
      * 查询当前最早的待处理消息创建时间，用于监控下发积压。

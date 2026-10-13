@@ -6,7 +6,7 @@ import java.util.List;
  * 赛事角色仓储。
  * <p>管理用户在赛事中的角色实体 {@link ContestRole}（如评委、管理员等）的持久化与查询。</p>
  */
-public interface ContestRoleRepository extends JpaRepository<ContestRole,Integer> {
+public interface ContestRoleRepository extends JpaRepository<ContestRole, Integer> {
     /**
      * 查询某赛事的全部角色配置，按主键正序。
      *

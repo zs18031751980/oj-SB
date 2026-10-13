@@ -11,13 +11,25 @@ import jakarta.persistence.*;
  * 唯一约束保证同一用户对同一回复只能点赞一次。</p>
  */
 @Entity
-@Table(name = "discussion_reply_likes", uniqueConstraints = @UniqueConstraint(name = "uq_discussion_reply_like", columnNames = {"reply_id", "user_id"}))
+@Table(name = "discussion_reply_likes", uniqueConstraints =
+        @UniqueConstraint(name = "uq_discussion_reply_like", columnNames = {
+        "reply_id", "user_id"}))
 public class DiscussionReplyLike extends BaseEntity {
     /** 被点赞的回复。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "reply_id") private DiscussionReply reply;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "reply_id")
+    private DiscussionReply reply;
     /** 点赞用户。 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "user_id") private User user;
-    protected DiscussionReplyLike() {}
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id")
+    private User user;
+    protected DiscussionReplyLike() {
+    }
     /** 构建回复点赞关系。 */
-    public static DiscussionReplyLike of(DiscussionReply reply, User user) { DiscussionReplyLike item = new DiscussionReplyLike(); item.reply = reply; item.user = user; return item; }
+    public static DiscussionReplyLike of(DiscussionReply reply, User user) {
+        DiscussionReplyLike item = new DiscussionReplyLike();
+        item.reply = reply;
+        item.user = user;
+        return item;
+    }
 }

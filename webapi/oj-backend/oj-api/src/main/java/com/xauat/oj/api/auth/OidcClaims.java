@@ -18,7 +18,8 @@ public final class OidcClaims {
             Map.entry("founder", "manager"), Map.entry("user", "member"),
             Map.entry("部长", "manager"), Map.entry("部员", "staff"), Map.entry("社员", "member"),
             Map.entry("社长", "manager"), Map.entry("副社长", "manager"), Map.entry("副部长", "manager"),
-            Map.entry("干事", "staff"), Map.entry("部门主管", "manager"), Map.entry("普通用户", "member"), Map.entry("管理员", "manager"),
+            Map.entry("干事", "staff"), Map.entry("部门主管", "manager"), Map.entry("普通用户", "member"),
+            Map.entry("管理员", "manager"),
             Map.entry("role_admin", "manager"), Map.entry("role_manager", "manager"), Map.entry("role_staff", "staff"),
             Map.entry("role_member", "member"), Map.entry("role_user", "member"));
     private static final Map<String, Integer> PRIORITY = Map.of("manager", 3, "staff", 2, "member", 1);
@@ -27,10 +28,12 @@ public final class OidcClaims {
             "position", "realmaccess", "role", "roles", "userrole", "usertype");
     private static final Set<String> IDENTITY_CONTAINERS = Set.of("account", "claims", "principal", "user", "userinfo");
     private static final Set<String> TRUE_VALUES = Set.of("active", "enabled", "normal", "valid", "1", "true");
-    private static final Set<String> FALSE_VALUES = Set.of("inactive", "disabled", "locked", "suspended", "invalid", "0", "false");
+    private static final Set<String> FALSE_VALUES = Set.of("inactive", "disabled", "locked", "suspended", "invalid",
+            "0", "false");
 
     /** 工具类禁止实例化。 */
-    private OidcClaims() {}
+    private OidcClaims() {
+    }
 
     /**
      * 递归扫描 claims，提取并归一化后返回优先级最高的角色。
@@ -41,12 +44,16 @@ public final class OidcClaims {
     public static String highestRole(JsonNode source) {
         List<String> roles = new ArrayList<>();
         visit(source, false, roles);
-        String best = "member"; int bestPriority = 1;
+        String best = "member";
+        int bestPriority = 1;
         // 允许多个角色字段并存，按优先级取最高者，避免因字段顺序不同产生不一致结果
         for (String raw : roles) {
             String normalized = normalizeRole(raw);
             int priority = PRIORITY.getOrDefault(normalized, 0);
-            if (priority > bestPriority) { bestPriority = priority; best = normalized; }
+            if (priority > bestPriority) {
+                bestPriority = priority;
+                best = normalized;
+            }
         }
         return best;
     }
@@ -58,7 +65,8 @@ public final class OidcClaims {
      * @return 归一化角色，未知值回退 member
      */
     public static String normalizeRole(String raw) {
-        if (raw == null) return "member";
+        if (raw == null)
+            return "member";
         return ROLE_MAP.getOrDefault(raw.trim().toLowerCase(Locale.ROOT), "member");
     }
 
@@ -72,11 +80,15 @@ public final class OidcClaims {
         // 兼容不同供应商的字段命名
         for (String field : List.of("is_active", "active", "enabled", "status", "account_status")) {
             JsonNode value = source.get(field);
-            if (value == null || value.isNull()) continue;
-            if (value.isBoolean()) return value.booleanValue();
+            if (value == null || value.isNull())
+                continue;
+            if (value.isBoolean())
+                return value.booleanValue();
             String normalized = value.asText("").trim().toLowerCase(Locale.ROOT);
-            if (TRUE_VALUES.contains(normalized)) return true;
-            if (FALSE_VALUES.contains(normalized)) return false;
+            if (TRUE_VALUES.contains(normalized))
+                return true;
+            if (FALSE_VALUES.contains(normalized))
+                return false;
         }
         return null;
     }
@@ -91,7 +103,8 @@ public final class OidcClaims {
         for (String key : List.of("preferred_username", "nickname", "name", "email", "picture", "avatar", "avatar_url",
                 "authorities", "department", "group", "groups", "identities", "identity", "level", "memberOf",
                 "position", "realm_access", "role", "roles", "type", "userRole", "userType", "user_type")) {
-            if (claims.has(key)) target.put(key, claims.get(key));
+            if (claims.has(key))
+                target.put(key, claims.get(key));
         }
     }
 
@@ -101,7 +114,8 @@ public final class OidcClaims {
      * @param ambiguous 当前是否处于身份容器内；只有此时才把含义模糊的 {@code type} 也当作角色
      */
     private static void visit(JsonNode node, boolean ambiguous, List<String> roles) {
-        if (node == null || !node.isObject()) return;
+        if (node == null || !node.isObject())
+            return;
         node.fields().forEachRemaining(entry -> {
             String normalized = normalizeField(entry.getKey());
             if (ROLE_FIELDS.contains(normalized) || (ambiguous && normalized.equals("type"))) {
@@ -110,31 +124,43 @@ public final class OidcClaims {
             if (IDENTITY_CONTAINERS.contains(normalized)) {
                 // 进入 user/claims 等容器后，才把 type 视为角色来源，降低误判
                 JsonNode value = entry.getValue();
-                if (value.isObject()) visit(value, true, roles);
-                else if (value.isArray()) value.forEach(item -> { if (item.isObject()) visit(item, true, roles); });
+                if (value.isObject())
+                    visit(value, true, roles);
+                else if (value.isArray())
+                    value.forEach(item -> {
+                        if (item.isObject())
+                            visit(item, true, roles);
+                    });
             }
         });
     }
 
     /** 从字符串、对象或数组中递归抽取角色名。 */
     private static void iterRoleValues(JsonNode value, List<String> roles) {
-        if (value == null) return;
-        if (value.isTextual()) { roles.add(value.asText()); return; }
+        if (value == null)
+            return;
+        if (value.isTextual()) {
+            roles.add(value.asText());
+            return;
+        }
         if (value.isObject()) {
             value.fields().forEachRemaining(entry -> {
                 String normalized = normalizeField(entry.getKey());
-                if (ROLE_FIELDS.contains(normalized) || normalized.equals("name")) iterRoleValues(entry.getValue(), roles);
+                if (ROLE_FIELDS.contains(normalized) || normalized.equals("name"))
+                    iterRoleValues(entry.getValue(), roles);
             });
             return;
         }
-        if (value.isArray()) value.forEach(item -> iterRoleValues(item, roles));
+        if (value.isArray())
+            value.forEach(item -> iterRoleValues(item, roles));
     }
 
     /** 去掉字段名中的分隔符并小写，使 camelCase/snake_case/kebab-case 能统一匹配。 */
     private static String normalizeField(String field) {
         StringBuilder result = new StringBuilder();
         for (char character : field.toLowerCase(Locale.ROOT).toCharArray()) {
-            if (Character.isLetterOrDigit(character)) result.append(character);
+            if (Character.isLetterOrDigit(character))
+                result.append(character);
         }
         return result.toString();
     }

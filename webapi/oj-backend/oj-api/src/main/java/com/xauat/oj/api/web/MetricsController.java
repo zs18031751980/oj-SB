@@ -19,8 +19,10 @@ public class MetricsController {
     private final StringRedisTemplate redis;
     private final String token;
 
-    public MetricsController(StringRedisTemplate redis, @Value("${oj.metrics.token:}") String token) {
-        this.redis = redis; this.token = token == null ? "" : token.trim();
+    public MetricsController(StringRedisTemplate redis, @Value("${oj.metrics.token:}")
+    String token) {
+        this.redis = redis;
+        this.token = token == null ? "" : token.trim();
     }
 
     /**
@@ -30,11 +32,14 @@ public class MetricsController {
      * @return 指标文本；认证失败返回 401
      */
     @GetMapping(value = "/metrics", produces = "text/plain;version=0.0.4;charset=utf-8")
-    public ResponseEntity<String> metrics(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public ResponseEntity<String> metrics(
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization) {
         // 未配置 token 时视为开发环境放行，否则必须匹配 Bearer 令牌
         if (!token.isBlank()) {
             String expected = "Bearer " + token;
-            if (authorization == null || !MessageDigest.isEqual(authorization.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8))) {
+            if (authorization == null || !MessageDigest.isEqual(authorization.getBytes(StandardCharsets.UTF_8),
+                    expected.getBytes(StandardCharsets.UTF_8))) {
                 return ResponseEntity.status(401).body("{\"error\":\"Unauthorized\"}");
             }
         }
@@ -45,23 +50,28 @@ public class MetricsController {
     private String render() {
         String name = "oj_judge_stage_seconds";
         StringBuilder body = new StringBuilder();
-        body.append("# HELP ").append(name).append(" Judge stage duration in seconds\n# TYPE ").append(name).append(" histogram\n");
+        body.append("# HELP ").append(name).append(" Judge stage duration in seconds\n# TYPE ").append(name)
+                .append(" histogram\n");
         try {
             // 固定枚举 pool/stage 组合，输出低基数、可预测的指标序列
             Map<Object, Object> values = redis.opsForHash().entries("judge:stage:histogram");
             for (String pool : List.of("all", "contest", "practice", "rejudge", "validation")) {
                 for (String stage : List.of("queue", "compile", "execute", "total", "persist")) {
                     String prefix = pool + ":" + stage + ":";
-                    if (!values.containsKey(prefix + "count")) continue;
+                    if (!values.containsKey(prefix + "count"))
+                        continue;
                     String labels = "pool=\"" + pool + "\",stage=\"" + stage + "\"";
                     for (double bound : BUCKETS) {
-                        body.append(name).append("_bucket{").append(labels).append(",le=\"").append(bound).append("\"} ")
+                        body.append(name).append("_bucket{").append(labels).append(",le=\"").append(bound)
+                                .append("\"} ")
                                 .append(values.getOrDefault(prefix + bound, "0")).append('\n');
                     }
                     Object count = values.get(prefix + "count");
-                    body.append(name).append("_bucket{").append(labels).append(",le=\"+Inf\"} ").append(count).append('\n');
+                    body.append(name).append("_bucket{").append(labels).append(",le=\"+Inf\"} ").append(count)
+                            .append('\n');
                     body.append(name).append("_count{").append(labels).append("} ").append(count).append('\n');
-                    body.append(name).append("_sum{").append(labels).append("} ").append(values.getOrDefault(prefix + "sum", "0")).append('\n');
+                    body.append(name).append("_sum{").append(labels).append("} ")
+                            .append(values.getOrDefault(prefix + "sum", "0")).append('\n');
                 }
             }
         } catch (RuntimeException exception) {

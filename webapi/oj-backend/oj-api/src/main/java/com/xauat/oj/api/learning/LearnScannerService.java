@@ -30,13 +30,18 @@ public class LearnScannerService {
 
     public LearnScannerService() {
         String configured = System.getenv("OJ_LEARN_ROOT");
-        this.root = Paths.get(configured == null || configured.isBlank() ? "./learn" : configured).toAbsolutePath().normalize();
+        this.root = Paths.get(configured == null || configured.isBlank() ? "./learn" : configured).toAbsolutePath()
+                .normalize();
     }
 
     /** 资料根目录（绝对规范化路径）。 */
-    public Path root() { return root; }
+    public Path root() {
+        return root;
+    }
     /** 根目录是否为可读目录。 */
-    public boolean available() { return Files.isDirectory(root); }
+    public boolean available() {
+        return Files.isDirectory(root);
+    }
 
     /**
      * 返回目录树，命中 TTL 缓存则直接复用。
@@ -44,14 +49,18 @@ public class LearnScannerService {
      * @return 根节点（无内容时为 {@code null}）
      */
     public synchronized Map<String, Object> tree() {
-        if (cache != null && System.currentTimeMillis() - cacheTs < CACHE_TTL_MS) return cache;
+        if (cache != null && System.currentTimeMillis() - cacheTs < CACHE_TTL_MS)
+            return cache;
         cache = scan(root, "", 0);
         cacheTs = System.currentTimeMillis();
         return cache;
     }
 
     /** 清空缓存并立即重建目录树。 */
-    public synchronized void rescan() { cache = null; tree(); }
+    public synchronized void rescan() {
+        cache = null;
+        tree();
+    }
 
     /**
      * 递归扫描目录，构建目录/文件节点。
@@ -62,19 +71,23 @@ public class LearnScannerService {
      * @return 节点；无有效内容返回 {@code null}
      */
     private Map<String, Object> scan(Path directory, String relative, int depth) {
-        if (depth > MAX_DEPTH || !Files.isDirectory(directory)) return null;
+        if (depth > MAX_DEPTH || !Files.isDirectory(directory))
+            return null;
         List<Map<String, Object>> children = new ArrayList<>();
         try (var stream = Files.list(directory)) {
             for (Path entry : stream.sorted().toList()) {
                 String name = entry.getFileName().toString();
                 // 跳过隐藏文件/目录。
-                if (name.startsWith(".")) continue;
+                if (name.startsWith("."))
+                    continue;
                 String entryRel = relative.isEmpty() ? name : relative + "/" + name;
                 if (Files.isDirectory(entry)) {
                     // 跳过明确不需要展示的目录。
-                    if (SKIP_DIRS.contains(name.toLowerCase(Locale.ROOT))) continue;
+                    if (SKIP_DIRS.contains(name.toLowerCase(Locale.ROOT)))
+                        continue;
                     Map<String, Object> child = scan(entry, entryRel, depth + 1);
-                    if (child != null && !((List<?>) child.get("children")).isEmpty()) children.add(child);
+                    if (child != null && !((List<?>) child.get("children")).isEmpty())
+                        children.add(child);
                 } else if (name.toLowerCase(Locale.ROOT).endsWith(".md")) {
                     Map<String, Object> file = new LinkedHashMap<>();
                     file.put("id", makeId(entryRel));
@@ -89,7 +102,8 @@ public class LearnScannerService {
         } catch (IOException exception) {
             return null;
         }
-        if (children.isEmpty() && relative.isEmpty()) return null;
+        if (children.isEmpty() && relative.isEmpty())
+            return null;
         Map<String, Object> node = new LinkedHashMap<>();
         node.put("id", makeId(relative.isEmpty() ? "__root__" : relative));
         node.put("name", relative.isEmpty() ? "学习资料" : sanitize(directory.getFileName().toString()));
@@ -109,11 +123,15 @@ public class LearnScannerService {
      */
     public Optional<Map<String, Object>> readMarkdown(String relativePath) {
         Path resolved = safeResolve(relativePath);
-        if (resolved == null || !Files.isRegularFile(resolved) || !resolved.toString().toLowerCase(Locale.ROOT).endsWith(".md")) return Optional.empty();
+        if (resolved == null || !Files.isRegularFile(resolved)
+                || !resolved.toString().toLowerCase(Locale.ROOT).endsWith(".md"))
+            return Optional.empty();
         try {
             String content = Files.readString(resolved, StandardCharsets.UTF_8);
             Matcher matcher = TITLE.matcher(content);
-            String title = matcher.find() ? matcher.group(1).trim() : resolved.getFileName().toString().replace(".md", "");
+            String title = matcher.find()
+                    ? matcher.group(1).trim()
+                    : resolved.getFileName().toString().replace(".md", "");
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("content", content);
             result.put("title", title);
@@ -138,7 +156,8 @@ public class LearnScannerService {
 
     /** 安全解析路径：规范化后必须仍在根目录内，防止路径穿越。 */
     private Path safeResolve(String relativePath) {
-        if (relativePath == null) return null;
+        if (relativePath == null)
+            return null;
         try {
             Path resolved = root.resolve(relativePath).normalize();
             return resolved.startsWith(root) ? resolved : null;
