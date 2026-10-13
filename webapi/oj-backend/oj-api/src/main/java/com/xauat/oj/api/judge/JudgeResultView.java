@@ -19,6 +19,12 @@ public class JudgeResultView {
 
     public JudgeResultView(ObjectMapper mapper) { this.mapper = mapper; }
 
+    /**
+     * 解析数据库中保存的判题明细 JSON。
+     *
+     * @param payload JSON 字符串（可为空）
+     * @return 规范化后的逐用例结果列表；解析失败返回空列表
+     */
     public List<Map<String, Object>> parse(String payload) {
         if (payload == null || payload.isBlank()) return List.of();
         try {
@@ -31,6 +37,12 @@ public class JudgeResultView {
         }
     }
 
+    /**
+     * 找出第一个未通过用例的序号。
+     *
+     * @param results 逐用例结果
+     * @return 首个失败用例索引；全部通过返回 {@code null}
+     */
     public Integer failIndex(List<Map<String, Object>> results) {
         for (Map<String, Object> item : results) {
             if (!Boolean.TRUE.equals(item.get("passed"))) return (Integer) item.get("testCaseIndex");
@@ -38,13 +50,21 @@ public class JudgeResultView {
         return null;
     }
 
+    /**
+     * 根据状态文本识别编译错误。
+     *
+     * @param status 判题状态
+     * @return 编译失败提示文案，否则 {@code null}
+     */
     public String compileError(String status) {
         if (status == null) return null;
+        // 兼容 "CE" 与各种含 "compil" 的状态描述。
         String normalized = status.replace(" ", "").toLowerCase();
         if (normalized.equals("ce") || normalized.contains("compil")) return "编译失败，请检查代码";
         return null;
     }
 
+    /** 将单条原始结果适配为前端字段（兼容多种键名与状态结构）。 */
     @SuppressWarnings("unchecked")
     private Map<String, Object> item(Map<String, Object> raw, int index) {
         String stdout = firstString(raw, "stdout", "actualOutput", "actual_output");
@@ -62,6 +82,7 @@ public class JudgeResultView {
         return item;
     }
 
+    /** 判断单条结果是否通过：兼容布尔 passed、Judge0 status.id==3 与文本状态。 */
     private boolean passed(Map<String, Object> raw) {
         Object passed = raw.get("passed");
         if (passed instanceof Boolean value) return value;
@@ -69,6 +90,7 @@ public class JudgeResultView {
         if (status instanceof Map<?, ?> map) {
             Object id = map.get("id");
             Object description = map.get("description");
+            // Judge0 约定 status.id == 3 表示 Accepted。
             if (id instanceof Number number) return number.intValue() == 3;
             if (description != null) return "accepted".equalsIgnoreCase(String.valueOf(description));
         }
@@ -79,6 +101,7 @@ public class JudgeResultView {
         return false;
     }
 
+    /** 返回首个非空字符串字段，用于兼容多种键名。 */
     private String firstString(Map<String, Object> raw, String... keys) {
         for (String key : keys) {
             Object value = raw.get(key);

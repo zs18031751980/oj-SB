@@ -28,6 +28,16 @@ public class AuditExporter {
         this.audits = audits; this.mapper = mapper; this.directory = directory;
     }
 
+    /**
+     * 增量导出审计记录到受控目录。
+     *
+     * <p>按 id 升序读取 {@code (after, after+size]} 区间的审计行，逐行写入
+     * {@code audit-<id>.json}；写入不可变（只补不覆盖）。返回已导出条数与下一游标。</p>
+     *
+     * @param after 起始审计 id（不含），必须非负
+     * @param limit 单次导出上限（服务端再夹取到 1000）
+     * @return {@code {exported, next_cursor}}
+     */
     public Map<String, Object> export(int after, int limit) {
         if (directory == null || directory.isBlank()) {
             throw new com.xauat.oj.common.exception.OjException("SERVICE_UNAVAILABLE", "未配置审计导出目录");
@@ -39,6 +49,7 @@ public class AuditExporter {
         int exported = 0; int cursor = after;
         try {
             Files.createDirectories(root);
+            // 目录权限收紧为仅属主可读写执行（非 POSIX 文件系统忽略）。
             try { Files.setPosixFilePermissions(root, PosixFilePermissions.fromString("rwx------")); } catch (UnsupportedOperationException ignored) { }
             for (ContestAudit row : rows) {
                 writeOnce(root, "audit-" + row.getId() + ".json", row);
@@ -53,6 +64,10 @@ public class AuditExporter {
         return result;
     }
 
+    /**
+     * 只写不覆盖地持久化单条审计：先写临时文件再原子移动；
+     * 若目标已存在，内容一致则跳过，不一致则视为冲突。
+     */
     private void writeOnce(Path root, String name, ContestAudit row) throws Exception {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("id", row.getId());
@@ -67,6 +82,7 @@ public class AuditExporter {
             if (!java.util.Arrays.equals(Files.readAllBytes(target), content)) throw new IllegalStateException("审计归档冲突: " + name);
             return;
         }
+        // 先写临时文件，再原子重命名，避免导出中途产生半成品文件。
         Path temp = root.resolve(".pending-" + java.util.UUID.randomUUID().toString().replace("-", ""));
         Files.write(temp, content, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
         try { Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE); }

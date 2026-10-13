@@ -51,6 +51,15 @@ public class AdminContestController {
         this.validationJobs = validationJobs; this.mapper = mapper;
     }
 
+    /**
+     * 列出某场比赛的题目（管理视图）。
+     *
+     * <p>权限：manager/staff。必须提供 {@code contest_id}，按 sort_order、id 升序返回。</p>
+     *
+     * @param auth       认证头
+     * @param contest_id 比赛 id
+     * @return 题目摘要列表；缺少 contest_id 返回 400
+     */
     @GetMapping({"", "/"})
     public ResponseEntity<?> list(@RequestHeader(value = "Authorization", required = false) String auth, @RequestParam(required = false) Integer contest_id) {
         manager(auth);
@@ -58,6 +67,15 @@ public class AdminContestController {
         return ResponseEntity.ok(problems.findByContest_IdOrderBySortOrderAscIdAsc(contest_id).stream().map(this::view).toList());
     }
 
+    /**
+     * 查看单道比赛题目详情（含测试数据）。
+     *
+     * <p>权限：manager/staff。</p>
+     *
+     * @param auth 认证头
+     * @param id   比赛题目 id
+     * @return 题目详情与 testcases；不存在返回 404
+     */
     @GetMapping("/{id}")
     public ResponseEntity<?> detail(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id) {
         manager(auth);
@@ -68,6 +86,17 @@ public class AdminContestController {
         return ResponseEntity.ok(body);
     }
 
+    /**
+     * 新增比赛题目并写入测试数据。
+     *
+     * <p>权限：manager/staff。仅 DRAFT/READY 比赛可编辑；校验必填字段、时间/内存限制与测试数据格式，
+     * 保存后创建一条参考解校验任务（异步生成判题结果）。</p>
+     *
+     * @param auth       认证头
+     * @param contest_id 比赛 id
+     * @param body       题目字段与测试数据
+     * @return 201 与题目视图（testcase_generation=pending）
+     */
     @PostMapping({"", "/"})
     @Transactional
     public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false) String auth,
@@ -77,15 +106,19 @@ public class AdminContestController {
         if (contest_id == null) return ResponseEntity.badRequest().body(Map.of("error", "缺少 contest_id"));
         Contest contest = contests.findById(contest_id).orElse(null);
         if (contest == null) return ResponseEntity.notFound().build();
+        // 发布后题目与测试数据冻结，只有 DRAFT/READY 才可写。
         var editable = requireEditable(contest);
         if (editable != null) return editable;
+        // 必填字段校验。
         for (String field : List.of("problem_index", "title", "description", "correct_answer")) {
             if (str(body.get(field)).isBlank()) return ResponseEntity.badRequest().body(Map.of("error", field + " 不能为空"));
         }
         int[] limits;
+        // 校验时间/内存限制范围。
         try { limits = validateLimits(body.get("time_limit"), body.get("memory_limit")); }
         catch (IllegalArgumentException exception) { return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage())); }
         List<Map<String, Object>> normalized;
+        // 归一化测试数据（支持 testcases 或 samples 两种来源）。
         try { normalized = normalizeTestcases(body.get("testcases"), body.get("samples")); }
         catch (IllegalArgumentException exception) { return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage())); }
 
@@ -95,12 +128,24 @@ public class AdminContestController {
                 strOrDefault(body.get("language"), "cpp"), samplesJson(body.get("samples")), intOrDefault(body.get("sort_order"), 0));
         problems.save(problem);
         replaceTestcases(problem, normalized);
+        // 创建参考解校验任务：由后台 Worker 验证题面与测试数据是否自洽。
         validationJobs.save(ReferenceValidationJob.create(UUID.randomUUID().toString(), problem));
         Map<String, Object> result = view(problem);
         result.put("testcase_generation", "pending");
         return ResponseEntity.status(201).body(result);
     }
 
+    /**
+     * 更新比赛题目（部分字段）。
+     *
+     * <p>权限：manager/staff。仅 DRAFT/READY 比赛可编辑；传入限制时校验范围；
+     * 若含 testcases/samples 则整体替换测试数据，并递增校验版本、重建校验任务。</p>
+     *
+     * @param auth 认证头
+     * @param id   比赛题目 id
+     * @param body 待更新字段
+     * @return 更新后的题目视图；比赛已发布返回 409
+     */
     @PutMapping("/{id}")
     @Transactional
     public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id, @RequestBody Map<String, Object> body) {
@@ -125,6 +170,7 @@ public class AdminContestController {
             try { replacement = normalizeTestcases(body.get("testcases"), body.get("samples")); }
             catch (IllegalArgumentException exception) { return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage())); }
         }
+        // 递增校验版本，使旧的校验结果失效并触发重校验。
         problem.bumpValidation();
         problems.save(problem);
         if (replacement != null) replaceTestcases(problem, replacement);
@@ -132,6 +178,16 @@ public class AdminContestController {
         return ResponseEntity.ok(view(problem));
     }
 
+    /**
+     * 删除比赛题目及其关联数据。
+     *
+     * <p>权限：manager/staff。仅 DRAFT/READY 比赛可删除；按外键依赖顺序
+     * 依次清理判题记录、outbox、提交、测试数据后删除题目。数据库故障返回 503。</p>
+     *
+     * @param auth 认证头
+     * @param id   比赛题目 id
+     * @return 成功标记；比赛已发布返回 409
+     */
     @DeleteMapping("/{id}")
     @Transactional
     public ResponseEntity<?> delete(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id) {
@@ -142,6 +198,7 @@ public class AdminContestController {
         var editable = requireEditable(contest);
         if (editable != null) return editable;
         try {
+            // 依据外键依赖顺序清理，避免约束冲突。
             judgements.deleteByProblemId(id);
             outboxes.deleteByProblemId(id);
             submissions.deleteByProblemId(id);
@@ -161,6 +218,16 @@ public class AdminContestController {
         return ResponseEntity.status(409).body(Map.of("error", "自动随机生成已停用，请在编辑题目时提交经过验证的测试数据"));
     }
 
+    /**
+     * 查询测试数据生成/校验进度。
+     *
+     * <p>权限：manager/staff。将题目的校验状态映射为前端可用的
+     * {@code pending/done/error}。</p>
+     *
+     * @param auth 认证头
+     * @param id   比赛题目 id
+     * @return 状态、测试数据总数、已生成数与错误信息
+     */
     @GetMapping("/{id}/testcase-generation")
     public ResponseEntity<?> generation(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable Integer id) {
         manager(auth);
@@ -180,6 +247,12 @@ public class AdminContestController {
         return ResponseEntity.ok(body);
     }
 
+    /**
+     * 校验比赛是否处于可编辑状态（DRAFT/READY）。
+     *
+     * @param contest 比赛
+     * @return 不可编辑时返回对应错误响应，可编辑时返回 {@code null}
+     */
     private ResponseEntity<?> requireEditable(Contest contest) {
         if (contest == null) return ResponseEntity.notFound().build();
         String state = contest.getLifecycleState();
@@ -189,6 +262,14 @@ public class AdminContestController {
         return null;
     }
 
+    /**
+     * 校验并归一化时间/内存限制。
+     *
+     * @param timeLimit  时间限制（ms），缺省 1000
+     * @param memoryLimit 内存限制（MB），缺省 256
+     * @return 数组 [时间, 内存]
+     * @throws IllegalArgumentException 超出允许范围时抛出
+     */
     private int[] validateLimits(Object timeLimit, Object memoryLimit) {
         int timeMs = intOrDefault(timeLimit, 1000);
         int memoryMb = intOrDefault(memoryLimit, 256);
@@ -197,6 +278,14 @@ public class AdminContestController {
         return new int[]{timeMs, memoryMb};
     }
 
+    /**
+     * 归一化测试数据：兼容 JSON 字符串/列表、默认样本标记，并限制数量与单组大小。
+     *
+     * @param rawTestcases 测试数据（优先）
+     * @param rawSamples   样本（回退来源，视为样本）
+     * @return 归一化后的测试数据项列表
+     * @throws IllegalArgumentException 数据不合法时抛出
+     */
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> normalizeTestcases(Object rawTestcases, Object rawSamples) {
         Object source = rawTestcases != null ? rawTestcases : rawSamples;
@@ -230,6 +319,7 @@ public class AdminContestController {
         return normalized;
     }
 
+    /** 全量替换题目的测试数据（先删后插，保持 sort_order 顺序）。 */
     private void replaceTestcases(ContestProblem problem, List<Map<String, Object>> normalized) {
         testcases.deleteByProblemId(problem.getId());
         int order = 0;
@@ -281,6 +371,13 @@ public class AdminContestController {
         }
     }
 
+    /**
+     * 要求当前用户为 manager 或 staff。
+     *
+     * @param auth 认证头
+     * @return 当前用户
+     * @throws com.xauat.oj.common.exception.OjException 权限不足时抛出 FORBIDDEN
+     */
     private User manager(String auth) {
         User user = currentUser.require(auth);
         if (!"manager".equals(user.getRole()) && !"staff".equals(user.getRole())) {

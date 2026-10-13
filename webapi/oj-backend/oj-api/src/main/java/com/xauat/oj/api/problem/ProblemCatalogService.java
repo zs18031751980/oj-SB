@@ -38,6 +38,11 @@ public class ProblemCatalogService {
         this.mapper = mapper;
     }
 
+    /**
+     * 汇总题库列表：静态题目在前，随后追加已结束比赛释放的题目。
+     *
+     * @return 题目摘要列表
+     */
     public List<Map<String, Object>> list() {
         List<Map<String, Object>> result = new ArrayList<>();
         staticCatalog.all().entrySet().stream().sorted(Map.Entry.comparingByKey())
@@ -50,9 +55,19 @@ public class ProblemCatalogService {
         return result;
     }
 
+    /**
+     * 按题库 id 查询详情。
+     *
+     * <p>id 命中静态题库直接返回；id 落在库内题目编码区间
+     * （{@code >= LIBRARY_ID_BASE}）时反解出比赛题目并校验比赛已结束。</p>
+     *
+     * @param id 题库 id
+     * @return 题目详情；不存在或比赛未结束返回空
+     */
     public Optional<Map<String, Object>> detail(Integer id) {
         Map<String, Object> staticProblem = staticCatalog.find(id).orElse(null);
         if (staticProblem != null) return Optional.of(staticDetail(staticProblem));
+        // 库内题目 id = 编码基数 + 比赛题目主键，避免与静态题号冲突。
         if (id != null && id >= StaticProblemCatalog.LIBRARY_ID_BASE) {
             int contestProblemId = id - StaticProblemCatalog.LIBRARY_ID_BASE;
             return contestProblems.findById(contestProblemId)
@@ -70,6 +85,12 @@ public class ProblemCatalogService {
                 .filter(problem -> contests.findById(problem.getContestId()).filter(this::isEnded).isPresent());
     }
 
+    /**
+     * 判断比赛是否“已结束并可进入题库”。
+     *
+     * @param contest 比赛
+     * @return 已结束返回 true；草稿/就绪/取消或非公开比赛返回 false
+     */
     public boolean isEnded(Contest contest) {
         if (contest == null || !contest.isPublicContest()) return false;
         String lifecycle = contest.getLifecycleState();
@@ -79,11 +100,13 @@ public class ProblemCatalogService {
         return end != null && !end.isAfter(LocalDateTime.now());
     }
 
+    /** 返回所有已结束的比赛，按 id 升序。 */
     public List<Contest> endedContests() {
         return contests.findAll().stream().filter(this::isEnded)
                 .sorted(Comparator.comparing(Contest::getId)).toList();
     }
 
+    /** 将静态题库原始记录转为列表摘要（不含测试数据）。 */
     private Map<String, Object> staticSummary(Map<String, Object> raw) {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("id", raw.get("id"));
@@ -100,6 +123,7 @@ public class ProblemCatalogService {
         return summary;
     }
 
+    /** 将静态题目转为详情：移除测试数据明细，仅保留用例数量。 */
     @SuppressWarnings("unchecked")
     private Map<String, Object> staticDetail(Map<String, Object> raw) {
         Map<String, Object> detail = new LinkedHashMap<>(raw);
@@ -112,6 +136,7 @@ public class ProblemCatalogService {
         return detail;
     }
 
+    /** 构造库内题目摘要；对外 id 使用编码基数偏移。 */
     private Map<String, Object> librarySummary(Contest contest, ContestProblem problem) {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("id", StaticProblemCatalog.LIBRARY_ID_BASE + problem.getId());
@@ -128,6 +153,7 @@ public class ProblemCatalogService {
         return summary;
     }
 
+    /** 构造库内题目详情：在摘要基础上补充题面、样例与用例数量。 */
     private Map<String, Object> libraryDetail(Contest contest, ContestProblem problem) {
         Map<String, Object> detail = librarySummary(contest, problem);
         detail.put("description", problem.getDescription());

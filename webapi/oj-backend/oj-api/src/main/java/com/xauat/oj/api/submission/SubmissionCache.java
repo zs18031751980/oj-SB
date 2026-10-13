@@ -20,6 +20,12 @@ public class SubmissionCache {
 
     public SubmissionCache(StringRedisTemplate redis, ObjectMapper mapper) { this.redis = redis; this.mapper = mapper; }
 
+    /**
+     * 读取缓存；Redis 异常时返回空，不影响主流程。
+     *
+     * @param key 缓存键
+     * @return 缓存对象
+     */
     public Optional<LinkedHashMap<String, Object>> get(String key) {
         try {
             String value = redis.opsForValue().get(key);
@@ -30,11 +36,13 @@ public class SubmissionCache {
         }
     }
 
+    /** 写入缓存（固定 TTL），失败静默忽略。 */
     public void put(String key, Object body) {
         try { redis.opsForValue().set(key, mapper.writeValueAsString(body), TTL); }
         catch (Exception ignored) { }
     }
 
+    /** 删除缓存键，供判题写入终态后主动失效。 */
     public void evict(String key) {
         try { redis.delete(key); } catch (RuntimeException ignored) { }
     }

@@ -11,6 +11,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 公告接口（{@code /announcement}）：公开只读已发布公告，管理端可增删改。
+ *
+ * <p>未登录用户只能看到已发布公告；manager 可通过 {@code include_unpublished}
+ * 查看全部（含草稿）。</p>
+ */
 @RestController
 @RequestMapping("/announcement")
 public class AnnouncementController {
@@ -19,16 +25,33 @@ public class AnnouncementController {
 
     public AnnouncementController(AnnouncementRepository announcements, CurrentUser currentUser) { this.announcements = announcements; this.currentUser = currentUser; }
 
+    /**
+     * 列出公告。
+     *
+     * @param authorization       认证头（可空）
+     * @param include_unpublished 是否包含未发布公告（仅 manager 生效）
+     * @return 按发布时间/创建时间倒序的公告列表
+     */
     @GetMapping({"", "/"})
     public List<Map<String, Object>> list(@RequestHeader(value = "Authorization", required = false) String authorization,
                                           @RequestParam(defaultValue = "false") boolean include_unpublished) {
         boolean admin = isManager(authorization);
+        // 只有 manager 才能拉取全部公告，否则一律只返回已发布内容。
         List<Announcement> items = (include_unpublished && admin)
                 ? announcements.findAll()
                 : announcements.findByPublishedTrueOrderByPublishedAtDescCreatedAtDesc();
         return items.stream().map(this::view).toList();
     }
 
+    /**
+     * 查看公告详情。
+     *
+     * <p>未发布公告对非 manager 伪装成不存在（返回 404），避免泄露草稿。</p>
+     *
+     * @param authorization 认证头（可空）
+     * @param id            公告 id
+     * @return 公告视图；不存在或无权查看返回 404
+     */
     @GetMapping("/{id}")
     public ResponseEntity<?> detail(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
         return announcements.findById(id).<ResponseEntity<?>>map(item -> {
@@ -37,6 +60,15 @@ public class AnnouncementController {
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /**
+     * 新建公告（敏感操作）。
+     *
+     * <p>权限：manager。</p>
+     *
+     * @param authorization 认证头
+     * @param request       公告内容（校验长度）
+     * @return 201 与公告视图；非 manager 返回 403
+     */
     @PostMapping({"", "/"})
     public ResponseEntity<?> create(@RequestHeader(value = "Authorization", required = false) String authorization, @jakarta.validation.Valid @RequestBody AnnouncementRequest request) {
         var user = currentUser.require(authorization); if (!"manager".equals(user.getRole())) return ResponseEntity.status(403).body(Map.of("error", "权限不足"));
@@ -44,6 +76,16 @@ public class AnnouncementController {
         return ResponseEntity.status(201).body(view(item));
     }
 
+    /**
+     * 更新公告（敏感操作）。
+     *
+     * <p>权限：manager。</p>
+     *
+     * @param authorization 认证头
+     * @param id            公告 id
+     * @param request       新的公告内容
+     * @return 更新后的公告视图；不存在返回 404，非 manager 返回 403
+     */
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id, @jakarta.validation.Valid @RequestBody AnnouncementRequest request) {
         var user = currentUser.require(authorization); if (!"manager".equals(user.getRole())) return ResponseEntity.status(403).body(Map.of("error", "权限不足"));
@@ -52,12 +94,22 @@ public class AnnouncementController {
         return ResponseEntity.ok(view(announcements.save(item)));
     }
 
+    /**
+     * 删除公告（敏感操作）。
+     *
+     * <p>权限：manager。</p>
+     *
+     * @param authorization 认证头
+     * @param id            公告 id
+     * @return 204；不存在返回 404，非 manager 返回 403
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Integer id) {
         var user = currentUser.require(authorization); if (!"manager".equals(user.getRole())) return ResponseEntity.status(403).body(Map.of("error", "权限不足"));
         if (!announcements.existsById(id)) return ResponseEntity.notFound().build(); announcements.deleteById(id); return ResponseEntity.noContent().build();
     }
 
+    /** 判断请求者是否为 manager；未登录或异常一律返回 false。 */
     private boolean isManager(String authorization) { try { return "manager".equals(currentUser.require(authorization).getRole()); } catch (RuntimeException e) { return false; } }
 
     private Map<String, Object> view(Announcement item) {

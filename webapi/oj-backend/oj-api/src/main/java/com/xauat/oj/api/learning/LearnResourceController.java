@@ -24,6 +24,11 @@ public class LearnResourceController {
         this.scanner = scanner; this.currentUser = currentUser;
     }
 
+    /**
+     * 返回学习资料目录树（公开）。
+     *
+     * @return 目录树；根目录不可用返回 500
+     */
     @GetMapping("/tree")
     public ResponseEntity<?> tree() {
         if (!scanner.available()) return ResponseEntity.status(500).body(Map.of("error", "学习资料暂时不可用"));
@@ -32,6 +37,12 @@ public class LearnResourceController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * 读取 Markdown 文件内容（公开）。
+     *
+     * @param request 原始请求，用于取 /file/ 之后的路径
+     * @return 文件内容与标题；不存在返回 404
+     */
     @GetMapping("/file/**")
     public ResponseEntity<?> file(HttpServletRequest request) {
         String path = pathAfter(request, "/file/");
@@ -42,6 +53,14 @@ public class LearnResourceController {
         }).orElseGet(() -> ResponseEntity.status(404).body(Map.of("error", "文件不存在")));
     }
 
+    /**
+     * 读取学习资料静态资源（图片等，公开）。
+     *
+     * <p>根据扩展名推断 Content-Type 并设置一天浏览器缓存；路径越界视为非法。</p>
+     *
+     * @param request 原始请求，用于取 /asset/ 之后的路径
+     * @return 文件流；不存在返回 404
+     */
     @GetMapping("/asset/**")
     public ResponseEntity<?> asset(HttpServletRequest request) {
         String path = pathAfter(request, "/asset/");
@@ -61,6 +80,7 @@ public class LearnResourceController {
     public ResponseEntity<?> rescan(@RequestHeader(value = "Authorization", required = false) String authorization) {
         var user = currentUser.require(authorization);
         String role = user.getRole() == null ? "" : user.getRole().toLowerCase(java.util.Locale.ROOT);
+        // 仅管理员角色可触发重扫。
         if (!Set.of("admin", "staff", "manager").contains(role)) {
             return ResponseEntity.status(403).body(Map.of("error", "需要管理员权限"));
         }
@@ -68,6 +88,7 @@ public class LearnResourceController {
         return ResponseEntity.ok(Map.of("success", true, "message", "目录已重新扫描"));
     }
 
+    /** 提取 URI 中标记之后的路径并做 URL 解码（解码失败回退原文）。 */
     private String pathAfter(HttpServletRequest request, String marker) {
         String uri = request.getRequestURI();
         int index = uri.indexOf(marker);
