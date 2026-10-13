@@ -25,12 +25,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserRepository users;
     private final AuthSessionRepository sessions;
 
+    /** 注入 JWT 解析、用户与会话仓库。 */
     public JwtAuthenticationFilter(JwtService jwtService, UserRepository users, AuthSessionRepository sessions) {
         this.jwtService = jwtService;
         this.users = users;
         this.sessions = sessions;
     }
 
+    /**
+     * 解析 Bearer 令牌并（在校验通过时）写入 SecurityContext。
+     *
+     * @param request  HTTP 请求
+     * @param response HTTP 响应
+     * @param chain    过滤器链
+     * @throws ServletException Servlet 异常
+     * @throws IOException      IO 异常
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
@@ -38,6 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (value != null && value.startsWith("Bearer ")) {
             try {
                 Claims claims = jwtService.parseAccess(value.substring(7));
+                // 令牌必须携带会话 id，并同时满足：未撤销、未过期、主体与会话归属一致、用户仍激活
                 String sid = claims.get("sid", String.class);
                 Integer userId = Integer.valueOf(claims.getSubject());
                 AuthSession session = sid == null ? null : sessions.findById(sid).orElse(null);
@@ -45,6 +56,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         && session.getExpiresAt().isAfter(LocalDateTime.now()) && userId.equals(session.getUserId());
                 var user = sessionValid ? users.findById(userId).filter(com.xauat.oj.core.user.domain.User::isActive).orElse(null) : null;
                 if (user != null) {
+                    // 角色统一转为大写并加 ROLE_ 前缀，以匹配 hasRole/hasAnyRole 的约定
                     String role = user.getRole() == null ? "MEMBER" : user.getRole().toUpperCase(Locale.ROOT);
                     var authentication = new UsernamePasswordAuthenticationToken(userId.toString(), null,
                             List.of(new SimpleGrantedAuthority("ROLE_" + role)));

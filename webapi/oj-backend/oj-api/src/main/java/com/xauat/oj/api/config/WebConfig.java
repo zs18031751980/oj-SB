@@ -19,15 +19,28 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Web 基础设施配置：静态资源映射、外层安全过滤器注册顺序、Tomcat 连接器与 CORS。
+ *
+ * <p>安全链路中的位置：将 {@code RequestId → CSRF → Origin 校验 → 安全响应头 → Metrics 认证}
+ * 五个 Servlet 过滤器按确定顺序挂载到请求链最外层，先于 Spring Security 处理。</p>
+ */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
     @Value("${oj.upload.avatar-dir:./data/avatars}") private String avatarDir;
 
+    /**
+     * 将本地头像目录映射到 {@code /uploads/avatars/**}。
+     *
+     * @param registry 资源处理器注册表
+     */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         String location = Path.of(avatarDir).toAbsolutePath().normalize().toUri().toString();
         registry.addResourceHandler("/uploads/avatars/**").addResourceLocations(location);
     }
+
+    /** 注册请求 id 过滤器（order=0，全部路径），供日志与错误响应关联同一请求。 */
     @Bean
     FilterRegistrationBean<RequestIdFilter> requestIdFilter() {
         FilterRegistrationBean<RequestIdFilter> registration = new FilterRegistrationBean<>(new RequestIdFilter());
@@ -36,24 +49,28 @@ public class WebConfig implements WebMvcConfigurer {
         return registration;
     }
 
+    /** 注册 CSRF 保护过滤器（order=1，仅 /auth/*），要求写操作携带 X-CSRF-Protection 头。 */
     @Bean
     FilterRegistrationBean<CsrfProtectionFilter> csrfProtectionFilter() {
         FilterRegistrationBean<CsrfProtectionFilter> registration = new FilterRegistrationBean<>(new CsrfProtectionFilter());
         registration.setOrder(1); registration.addUrlPatterns("/auth/*"); return registration;
     }
 
+    /** 注册来源校验过滤器（order=2，全部路径），限制浏览器跨站写请求。 */
     @Bean
     FilterRegistrationBean<OriginValidationFilter> originValidationFilter(@Value("${oj.cors.origins:}") String origins) {
         FilterRegistrationBean<OriginValidationFilter> registration = new FilterRegistrationBean<>(new OriginValidationFilter(origins));
         registration.setOrder(2); registration.addUrlPatterns("/*"); return registration;
     }
 
+    /** 注册安全响应头过滤器（order=3，全部路径）。 */
     @Bean
     FilterRegistrationBean<SecurityHeadersFilter> securityHeadersFilter() {
         FilterRegistrationBean<SecurityHeadersFilter> registration = new FilterRegistrationBean<>(new SecurityHeadersFilter());
         registration.setOrder(3); registration.addUrlPatterns("/*"); return registration;
     }
 
+    /** 注册指标端点认证过滤器（order=4，仅 /actuator/prometheus）。 */
     @Bean
     FilterRegistrationBean<MetricsAuthFilter> metricsAuthFilter(@Value("${oj.metrics.token:}") String token) {
         FilterRegistrationBean<MetricsAuthFilter> registration = new FilterRegistrationBean<>(new MetricsAuthFilter(token));

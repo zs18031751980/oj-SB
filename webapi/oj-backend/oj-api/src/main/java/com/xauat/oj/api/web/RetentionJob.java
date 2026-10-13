@@ -32,6 +32,11 @@ public class RetentionJob {
     private final int browsingDays;
     private final int outboxDays;
 
+    /**
+     * @param deadLetterDays 已处理死信保留天数
+     * @param browsingDays   浏览记录保留天数
+     * @param outboxDays     已派发 outbox 保留天数
+     */
     public RetentionJob(JudgeDeadLetterRepository deadLetters, LearnBrowsingHistoryRepository browsingHistory,
                         SubmissionOutboxRepository submissionOutboxes, ContestJudgeOutboxRepository contestOutboxes,
                         @Value("${oj.retention.dead-letter-days:30}") int deadLetterDays,
@@ -42,12 +47,18 @@ public class RetentionJob {
         this.deadLetterDays = deadLetterDays; this.browsingDays = browsingDays; this.outboxDays = outboxDays;
     }
 
+    /**
+     * 按计划执行保留策略清理，默认每天凌晨 3:30。
+     *
+     * <p>各阈值取 max 做下限保护，避免配置误设导致清理尚在使用的数据。</p>
+     */
     @Scheduled(cron = "${oj.retention.cron:0 30 3 * * *}")
     @Transactional
     public void cleanup() {
         LocalDateTime now = LocalDateTime.now();
         int letters = deadLetters.deleteResolvedBefore(now.minusDays(Math.max(1, deadLetterDays)));
         int history = browsingHistory.deleteBefore(now.minusDays(Math.max(1, browsingDays)));
+        // outbox 恢复记录至少保留 7 天；仅删除已派发（提交已进入终态）的记录
         LocalDateTime outboxCutoff = now.minusDays(Math.max(7, outboxDays));
         int regular = submissionOutboxes.deleteDispatchedBefore(outboxCutoff);
         int contest = contestOutboxes.deleteDispatchedFinalBefore(outboxCutoff, TERMINAL_STATUSES);

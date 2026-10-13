@@ -72,6 +72,15 @@ public class PackageService {
         return packages.findById(digest).orElseGet(() -> packages.save(ContestPackage.create(digest, problem, actorId, payload)));
     }
 
+    /**
+     * 暂存待验证题包：校验测试点、Checker、参考代码与资源限制，规范化后以内容摘要落库为 PENDING。
+     *
+     * @param problem 目标题目
+     * @param data    题包原始数据
+     * @param actorId 操作者 ID
+     * @return 落库后的题包（同一摘要幂等复用）
+     * @throws IllegalArgumentException 题包结构或配置不合法
+     */
     @SuppressWarnings("unchecked")
     public ContestPackage stage(ContestProblem problem, Map<String, Object> data, Integer actorId) {
         if (data == null) throw new IllegalArgumentException("无效题包");
@@ -80,6 +89,7 @@ public class PackageService {
             throw new IllegalArgumentException("题包需要 1 至 1000 个测试点");
         }
         List<Map<String, Object>> normalizedCases = new ArrayList<>();
+        // 规范化测试点，并确保至少存在一个隐藏测试点
         boolean hasHidden = false;
         for (int i = 0; i < cases.size(); i++) {
             if (!(cases.get(i) instanceof Map<?, ?> testcase) || !(testcase.get("input_data") instanceof String inputData)
@@ -127,8 +137,18 @@ public class PackageService {
         return packages.findById(digest).orElseGet(() -> packages.save(ContestPackage.staged(digest, problem, actorId, payload)));
     }
 
+    /**
+     * 激活已验证题包：将参考代码、资源限制与 Checker 配置写入题目，替换当前生效版本。
+     *
+     * @param digest  题包摘要
+     * @param actorId 操作者 ID
+     * @return 被激活的题包
+     * @throws IllegalArgumentException 题包或题目不存在
+     * @throws IllegalStateException    题包尚未验证通过或负载损坏
+     */
     public ContestPackage activate(String digest, Integer actorId) {
         ContestPackage pkg = packages.findById(digest).orElseThrow(() -> new IllegalArgumentException("题包不存在"));
+        // 只有 Worker 验证为 VALID 的题包才允许激活
         if (!"VALID".equals(pkg.getValidationState())) throw new IllegalStateException("题包尚未验证通过");
         try {
             Map<String, Object> data = mapper.readValue(pkg.getPayload(), new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {});
@@ -145,6 +165,7 @@ public class PackageService {
         return pkg;
     }
 
+    /** 校验 Checker 配置：名称需受支持；自定义 Checker 限定语言与源码长度；容差需有界。 */
     private void validateChecker(Map<String, Object> config) {
         String checker = config.get("checker") instanceof String value ? value : "text";
         if (!Checker.supportedName(checker)) throw new IllegalArgumentException("Unsupported checker");

@@ -23,8 +23,15 @@ public class MetricsController {
         this.redis = redis; this.token = token == null ? "" : token.trim();
     }
 
+    /**
+     * 暴露 Prometheus 文本格式的判题阶段直方图。
+     *
+     * @param authorization Bearer 令牌（配置了 token 时必填）
+     * @return 指标文本；认证失败返回 401
+     */
     @GetMapping(value = "/metrics", produces = "text/plain;version=0.0.4;charset=utf-8")
     public ResponseEntity<String> metrics(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        // 未配置 token 时视为开发环境放行，否则必须匹配 Bearer 令牌
         if (!token.isBlank()) {
             String expected = "Bearer " + token;
             if (authorization == null || !MessageDigest.isEqual(authorization.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8))) {
@@ -34,11 +41,13 @@ public class MetricsController {
         return ResponseEntity.ok(render());
     }
 
+    /** 从 Redis 哈希读取各队列/阶段的直方图计数并渲染为 Prometheus 文本。 */
     private String render() {
         String name = "oj_judge_stage_seconds";
         StringBuilder body = new StringBuilder();
         body.append("# HELP ").append(name).append(" Judge stage duration in seconds\n# TYPE ").append(name).append(" histogram\n");
         try {
+            // 固定枚举 pool/stage 组合，输出低基数、可预测的指标序列
             Map<Object, Object> values = redis.opsForHash().entries("judge:stage:histogram");
             for (String pool : List.of("all", "contest", "practice", "rejudge", "validation")) {
                 for (String stage : List.of("queue", "compile", "execute", "total", "persist")) {
@@ -56,6 +65,7 @@ public class MetricsController {
                 }
             }
         } catch (RuntimeException exception) {
+            // Redis 不可用时仍返回合法文本，仅以注释标示，避免抓取端报解析错误
             body.append("# redis unavailable\n");
         }
         return body.toString();

@@ -15,6 +15,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * 健康检查端点：存活（{@code /healthz}）、就绪（{@code /readyz}）与数据库探针。
+ *
+ * <p>就绪检查会串联数据库、Redis 以及可选的判题 worker 心跳，供负载均衡摘除未就绪实例。</p>
+ */
 @RestController
 public class HealthController {
     private final JdbcTemplate jdbcTemplate;
@@ -30,27 +35,48 @@ public class HealthController {
         this.requireWorker = requireWorker; this.workerFreshSeconds = workerFreshSeconds;
     }
 
+    /**
+     * 存活探针，只要进程可响应即视为存活。
+     *
+     * @param request 当前请求
+     * @return 固定 ok 状态
+     */
     @GetMapping({"/", "/healthz"})
     public Map<String, Object> health(HttpServletRequest request) { return body("ok", request); }
 
+    /**
+     * 就绪探针，依赖任一不可用即返回 503。
+     *
+     * @param request 当前请求
+     * @return 就绪或说明不可用原因的 503
+     */
     @GetMapping("/readyz")
     public ResponseEntity<Map<String, Object>> ready(HttpServletRequest request) {
+        // 依次探测数据库与 Redis，任一失败立即报告并提供具体依赖名，便于排障
         try { jdbcTemplate.queryForObject("select 1", Integer.class); }
         catch (RuntimeException exception) { return ResponseEntity.status(503).body(body("database unavailable", request)); }
         try { redis.getConnectionFactory().getConnection().ping(); }
         catch (RuntimeException exception) { return ResponseEntity.status(503).body(body("redis unavailable", request)); }
+        // 仅在显式要求时才以判题 worker 可用性作为就绪条件
         if (requireWorker && freshWorkerCount() == 0) {
             return ResponseEntity.status(503).body(body("no judge worker available", request));
         }
         return ResponseEntity.ok(body("ready", request));
     }
 
+    /**
+     * 数据库专用探针。
+     *
+     * @param request 当前请求
+     * @return 数据库可达返回 200，否则 503
+     */
     @GetMapping("/healthz/db")
     public ResponseEntity<Map<String, Object>> database(HttpServletRequest request) {
         try { jdbcTemplate.queryForObject("select 1", Integer.class); return ResponseEntity.ok(body("ok", request)); }
         catch (RuntimeException exception) { return ResponseEntity.status(503).body(body("database unavailable", request)); }
     }
 
+    /** 统计心跳时间在新鲜阈值内的 worker 数量；Redis 异常时保守返回 0。 */
     private long freshWorkerCount() {
         try {
             long now = Instant.now().getEpochSecond();
@@ -60,6 +86,7 @@ public class HealthController {
             for (String key : keys) {
                 String value = redis.opsForValue().get(key);
                 if (value == null) continue;
+                // 以心跳时间戳判断存活，避免依赖会残留的注册键
                 var node = mapper.readTree(value);
                 long stamp = node.path("heartbeat_unix").asLong(0);
                 if (now - stamp <= workerFreshSeconds) fresh++;
@@ -70,6 +97,7 @@ public class HealthController {
         }
     }
 
+    /** 构造统一健康响应体，附带请求 id 以便与链路日志关联。 */
     private Map<String, Object> body(String status, HttpServletRequest request) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", status);

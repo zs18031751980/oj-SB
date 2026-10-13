@@ -17,8 +17,16 @@ public class EntryResolver {
         this.members = members; this.teams = teams;
     }
 
+    /**
+     * 解析提交应归属的 entry 用户：属于队伍则返回队长，否则返回本人。
+     *
+     * @param contestId 比赛 ID
+     * @param userId    提交者 ID
+     * @return entry 用户 ID；入参为空时原样返回
+     */
     public Integer entryUser(Integer contestId, Integer userId) {
         if (contestId == null || userId == null) return userId;
+        // 先查队伍成员，再通过队伍拿到队长；任一环节缺失则回退到本人
         return members.findByContest_IdAndUser_Id(contestId, userId)
                 .flatMap(member -> teams.findById(member.getTeamId()))
                 .map(team -> team.getCaptainId())

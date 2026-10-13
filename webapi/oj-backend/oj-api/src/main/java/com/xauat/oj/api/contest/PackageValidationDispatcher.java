@@ -19,9 +19,14 @@ public class PackageValidationDispatcher {
         this.packages = packages; this.queue = queue;
     }
 
+    /**
+     * 定时派发待验证题包到 testcase_gen_queue，成功后标记为 VALIDATING。
+     * 投递失败不抛出，等待下一轮重试。
+     */
     @Scheduled(fixedDelayString = "${oj.outbox.poll-delay-ms:1000}")
     @Transactional
     public void dispatch() {
+        // 每次最多取 50 个最久未更新的 PENDING 题包，按更新时间升序保证公平
         for (var pkg : packages.findTop50ByValidationStateInOrderByUpdatedAtAsc(List.of("PENDING"))) {
             try { queue.publishOnce(JudgeQueues.TESTCASE_GEN, "package:" + pkg.getDigest(), 604800); pkg.markValidating(); packages.save(pkg); }
             catch (RuntimeException ignored) { }

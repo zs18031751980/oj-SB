@@ -29,12 +29,20 @@ public final class OidcClaims {
     private static final Set<String> TRUE_VALUES = Set.of("active", "enabled", "normal", "valid", "1", "true");
     private static final Set<String> FALSE_VALUES = Set.of("inactive", "disabled", "locked", "suspended", "invalid", "0", "false");
 
+    /** 工具类禁止实例化。 */
     private OidcClaims() {}
 
+    /**
+     * 递归扫描 claims，提取并归一化后返回优先级最高的角色。
+     *
+     * @param source 供应商身份声明
+     * @return 归一化角色（manager/staff/member），无有效角色时默认 member
+     */
     public static String highestRole(JsonNode source) {
         List<String> roles = new ArrayList<>();
         visit(source, false, roles);
         String best = "member"; int bestPriority = 1;
+        // 允许多个角色字段并存，按优先级取最高者，避免因字段顺序不同产生不一致结果
         for (String raw : roles) {
             String normalized = normalizeRole(raw);
             int priority = PRIORITY.getOrDefault(normalized, 0);
@@ -43,12 +51,25 @@ public final class OidcClaims {
         return best;
     }
 
+    /**
+     * 将供应商角色名归一化为本地角色。
+     *
+     * @param raw 原始角色名，可为 null
+     * @return 归一化角色，未知值回退 member
+     */
     public static String normalizeRole(String raw) {
         if (raw == null) return "member";
         return ROLE_MAP.getOrDefault(raw.trim().toLowerCase(Locale.ROOT), "member");
     }
 
+    /**
+     * 从 claims 推导账号启用状态。
+     *
+     * @param source 供应商身份声明
+     * @return true/false；无法判断返回 {@code null}（表示不改变本地状态）
+     */
     public static Boolean accountStatus(JsonNode source) {
+        // 兼容不同供应商的字段命名
         for (String field : List.of("is_active", "active", "enabled", "status", "account_status")) {
             JsonNode value = source.get(field);
             if (value == null || value.isNull()) continue;
@@ -60,6 +81,12 @@ public final class OidcClaims {
         return null;
     }
 
+    /**
+     * 将 claims 中的身份字段合并进目标映射。
+     *
+     * @param target 目标映射
+     * @param claims 供应商声明
+     */
     public static void mergeIdentityClaims(Map<String, Object> target, JsonNode claims) {
         for (String key : List.of("preferred_username", "nickname", "name", "email", "picture", "avatar", "avatar_url",
                 "authorities", "department", "group", "groups", "identities", "identity", "level", "memberOf",
@@ -68,6 +95,11 @@ public final class OidcClaims {
         }
     }
 
+    /**
+     * 深度优先遍历对象，收集角色字段。
+     *
+     * @param ambiguous 当前是否处于身份容器内；只有此时才把含义模糊的 {@code type} 也当作角色
+     */
     private static void visit(JsonNode node, boolean ambiguous, List<String> roles) {
         if (node == null || !node.isObject()) return;
         node.fields().forEachRemaining(entry -> {
@@ -76,6 +108,7 @@ public final class OidcClaims {
                 iterRoleValues(entry.getValue(), roles);
             }
             if (IDENTITY_CONTAINERS.contains(normalized)) {
+                // 进入 user/claims 等容器后，才把 type 视为角色来源，降低误判
                 JsonNode value = entry.getValue();
                 if (value.isObject()) visit(value, true, roles);
                 else if (value.isArray()) value.forEach(item -> { if (item.isObject()) visit(item, true, roles); });
@@ -83,6 +116,7 @@ public final class OidcClaims {
         });
     }
 
+    /** 从字符串、对象或数组中递归抽取角色名。 */
     private static void iterRoleValues(JsonNode value, List<String> roles) {
         if (value == null) return;
         if (value.isTextual()) { roles.add(value.asText()); return; }
@@ -96,6 +130,7 @@ public final class OidcClaims {
         if (value.isArray()) value.forEach(item -> iterRoleValues(item, roles));
     }
 
+    /** 去掉字段名中的分隔符并小写，使 camelCase/snake_case/kebab-case 能统一匹配。 */
     private static String normalizeField(String field) {
         StringBuilder result = new StringBuilder();
         for (char character : field.toLowerCase(Locale.ROOT).toCharArray()) {

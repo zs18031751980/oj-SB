@@ -44,21 +44,46 @@ public class ContestScoreboardService {
         this.snapshots = snapshots; this.users = users; this.mapper = mapper; this.entryResolver = entryResolver;
     }
 
+    /**
+     * 根据比赛生命周期与请求者身份选择快照种类。
+     * 已结算返回带修订号的 FINAL；封榜后非裁判看到 PUBLIC_FREEZE；否则为 LIVE。
+     *
+     * @param contest 比赛
+     * @param jury    请求者是否为裁判（裁判可看实时榜）
+     * @return 快照种类标识
+     */
     public String kindFor(Contest contest, boolean jury) {
+        // 结算后按 finalRevision 区分不可变快照版本
         if (FINAL.equals(contest.getLifecycleState()) || "FINALIZED".equals(contest.getLifecycleState())) {
             return contest.getFinalRevision() > 0 ? FINAL + ":" + contest.getFinalRevision() : FINAL;
         }
+        // 封榜后对非裁判隐藏封榜后的提交
         return contest.getFreezeTime() != null && LocalDateTime.now().isAfter(contest.getFreezeTime()) && !jury ? PUBLIC_FREEZE : LIVE;
     }
 
+    /**
+     * 比赛当前是否处于封榜状态：设置了封榜时间、未解封且已过封榜时刻。
+     *
+     * @param contest 比赛
+     * @return 是否封榜
+     */
     public boolean isFrozen(Contest contest) {
+        // 未设置封榜时间或已解封，则不算封榜
         if (contest.getFreezeTime() == null || contest.getThawedAt() != null) return false;
         if (List.of("DRAFT", "READY", "CANCELLED").contains(contest.getLifecycleState())) return false;
         return !LocalDateTime.now().isBefore(contest.getFreezeTime());
     }
 
+    /**
+     * 构建榜单响应体：赛制、题目序号列表与排名行。
+     *
+     * @param contest 比赛
+     * @param kind    快照种类（LIVE/PUBLIC_FREEZE/FINAL）
+     * @return 榜单响应结构
+     */
     public Map<String, Object> buildBody(Contest contest, String kind) {
         Map<String, Object> body = new LinkedHashMap<>();
+        // 顶层 mode 用于前端选择 ACM/OI 两种榜单展示
         body.put("mode", "ACM".equalsIgnoreCase(contest.getContestType()) ? "acm" : "oi");
         body.put("contest_type", contest.getContestType() == null ? "" : contest.getContestType());
         body.put("problem_indexes", problems.findByContest_IdOrderBySortOrderAscIdAsc(contest.getId()).stream()
@@ -87,12 +112,20 @@ public class ContestScoreboardService {
         }
     }
 
+    /**
+     * 将快照负载反序列化为响应体；负载损坏时返回空 Map，避免接口 500。
+     *
+     * @param snapshot 榜单快照
+     * @return 榜单响应结构
+     */
     public Map<String, Object> bodyOf(ContestScoreboardSnapshot snapshot) {
         try { return mapper.readValue(snapshot.getPayload(), new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {}); }
         catch (Exception exception) { return Map.of(); }
     }
 
     private List<Map<String, Object>> scoreboardRows(Contest contest, String kind) {
+        // 筛选有效提交：属于本场比赛、非复判父提交、已出结果；
+        // 非 LIVE 快照还要丢弃封榜时间之后的提交（封榜语义）
         var source = submissions.findByContest_IdOrderByIdDesc(contest.getId()).stream()
                 .sorted(Comparator.comparing(ContestSubmission::getId))
                 .filter(s -> s.getContestId().equals(contest.getId()) && s.isContestEligible() && s.getRejudgeOfId() == null
@@ -101,6 +134,7 @@ public class ContestScoreboardService {
                         && (LIVE.equals(kind) || s.getSubmittedAt() == null || contest.getFreezeTime() == null
                         || s.getSubmittedAt().isBefore(contest.getFreezeTime())))
                 .toList();
+        // 以 entry（队长）聚合，先为所有参赛者建立空行，保证零提交者也上榜
         Map<Integer, LinkedHashMap<String, ProblemScore>> perUser = new HashMap<>();
         participants.findAll().stream().filter(p -> contest.getId().equals(p.getContestId()))
                 .forEach(p -> perUser.putIfAbsent(entryResolver.entryUser(contest.getId(), p.getUserId()), new LinkedHashMap<>()));
@@ -122,6 +156,7 @@ public class ContestScoreboardService {
         int rank = 0; int previousScore = Integer.MIN_VALUE;
         for (int i = 0; i < rows.size(); i++) {
             var row = rows.get(i);
+            // 同分同名次（标准竞赛排名），分数变化时才把名次推进到当前序号
             if (row.score() != previousScore) rank = i + 1;
             previousScore = row.score();
             User user = users.findById(row.userId()).orElse(null);
@@ -139,14 +174,17 @@ public class ContestScoreboardService {
         ProblemScore(String index) { this.index = index; }
         void accept(ContestSubmission s, LocalDateTime start, boolean acm, int penaltyMinutes) {
             submissions++;
+            // 通过用例数与总分取历史最大，避免部分结果回退覆盖已有成绩
             int pass = s.getTotal() == 0 ? 0 : Math.max(0, s.getPassed());
             int tot = Math.max(0, s.getTotal());
             passed = Math.max(passed, pass); total = Math.max(total, tot);
             status = (s.getVerdict() == null || s.getVerdict().isBlank()) ? s.getStatus() : s.getVerdict();
             int percent = tot == 0 ? 0 : (s.getScore() > 0 ? s.getScore() : pass * 100 / tot);
+            // 已 AC 后不再改变该题成绩
             if (solved) return;
             if ("AC".equalsIgnoreCase(s.getVerdict()) || "Accepted".equalsIgnoreCase(s.getVerdict()) || "AC".equalsIgnoreCase(s.getStatus())) {
                 solved = true;
+                // ACM 罚时 = 首次 AC 用时 + 此前错误提交次数 × 罚时系数；OI 不计罚时
                 int minutes = start == null || s.getSubmittedAt() == null ? 0 : (int) java.time.Duration.between(start, s.getSubmittedAt()).toMinutes();
                 solveMinutes = minutes;
                 penalty = acm ? minutes + (submissions - 1) * penaltyMinutes : 0;
