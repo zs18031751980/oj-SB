@@ -36,17 +36,34 @@ public class AnnouncementController {
      * @return 按发布时间/创建时间倒序的公告列表
      */
     @GetMapping({"", "/"})
-    public List<Map<String, Object>> list(
+    public ResponseEntity<?> list(
             @RequestHeader(value = "Authorization", required = false)
             String authorization,
             @RequestParam(defaultValue = "false")
             boolean include_unpublished) {
-        boolean admin = isManager(authorization);
-        // 只有 manager 才能拉取全部公告，否则一律只返回已发布内容。
-        List<Announcement> items = (include_unpublished && admin)
-                ? announcements.findAll()
-                : announcements.findByPublishedTrueOrderByPublishedAtDescCreatedAtDesc();
-        return items.stream().map(this::view).toList();
+        var user = currentUser.optional(authorization);
+        String role = AnnouncementVisibility.roleOf(user);
+        List<Announcement> items;
+        if (include_unpublished) {
+            if (user == null)
+                return ResponseEntity.status(401).body(Map.of("error", "请先登录"));
+            if (!"manager".equals(role))
+                return ResponseEntity.status(403).body(Map.of("error", "权限不足，仅管理员可管理公告"));
+            items = announcements.findAll();
+        } else {
+            // 与旧后端一致：按角色可见的 permission 过滤，未知 permission 一律不公开。
+            items = announcements.findByPublishedTrueOrderByPublishedAtDescCreatedAtDesc().stream()
+                    .filter(item -> AnnouncementVisibility.visible(role, item.isPublished(), item.getPermission()))
+                    .toList();
+        }
+        var sorted = items.stream()
+                .sorted(java.util.Comparator
+                        .comparing((Announcement item) -> item.getPublishedAt(),
+                                java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
+                        .thenComparing(Announcement::getCreatedAt,
+                                java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .map(this::view).toList();
+        return ResponseEntity.ok(sorted);
     }
 
     /**
@@ -63,8 +80,10 @@ public class AnnouncementController {
     String authorization,
             @PathVariable
             Integer id) {
+        String role = AnnouncementVisibility.roleOf(currentUser.optional(authorization));
         return announcements.findById(id).<ResponseEntity<?>>map(item -> {
-            if (!item.isPublished() && !isManager(authorization))
+            // manager 可见全部；其余角色只能看到「已发布且在可见 permission 内」的公告。
+            if (!AnnouncementVisibility.visible(role, item.isPublished(), item.getPermission()))
                 return ResponseEntity.status(404).build();
             return ResponseEntity.ok(view(item));
         }).orElseGet(() -> ResponseEntity.notFound().build());
@@ -87,8 +106,11 @@ public class AnnouncementController {
         var user = currentUser.require(authorization);
         if (!"manager".equals(user.getRole()))
             return ResponseEntity.status(403).body(Map.of("error", "权限不足"));
+        String permission = AnnouncementVisibility.normalizePermission(request.permission());
+        if (permission == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "permission 无效"));
         Announcement item = announcements.save(Announcement.create(request.title(), request.content(),
-                request.category(), request.permission(), String.valueOf(user.getId()), request.published()));
+                request.category(), permission, String.valueOf(user.getId()), request.published()));
         return ResponseEntity.status(201).body(view(item));
     }
 
@@ -114,7 +136,10 @@ public class AnnouncementController {
         var item = announcements.findById(id).orElse(null);
         if (item == null)
             return ResponseEntity.notFound().build();
-        item.update(request.title(), request.content(), request.category(), request.permission(), request.published());
+        String permission = AnnouncementVisibility.normalizePermission(request.permission());
+        if (permission == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "permission 无效"));
+        item.update(request.title(), request.content(), request.category(), permission, request.published());
         return ResponseEntity.ok(view(announcements.save(item)));
     }
 
@@ -141,15 +166,6 @@ public class AnnouncementController {
         return ResponseEntity.noContent().build();
     }
 
-    /** 判断请求者是否为 manager；未登录或异常一律返回 false。 */
-    private boolean isManager(String authorization) {
-        try {
-            return "manager".equals(currentUser.require(authorization).getRole());
-        } catch (RuntimeException e) {
-            return false;
-        }
-    }
-
     private Map<String, Object> view(Announcement item) {
         return Map.of("id", item.getId(), "title", item.getTitle() == null ? "" : item.getTitle(), "content",
                 item.getContent() == null ? "" : item.getContent(),
@@ -163,8 +179,10 @@ public class AnnouncementController {
 
     public record AnnouncementRequest(@JsonProperty("is_published") @JsonAlias("published")
     boolean published,
+            @jakarta.validation.constraints.NotBlank
             @jakarta.validation.constraints.Size(max = 200)
             String title,
+            @jakarta.validation.constraints.NotBlank
             @jakarta.validation.constraints.Size(max = 131072)
             String content,
             @jakarta.validation.constraints.Size(max = 50)

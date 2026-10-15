@@ -2,13 +2,16 @@ package com.xauat.oj.api.judge;
 
 import com.xauat.oj.api.auth.CurrentUser;
 import com.xauat.oj.infrastructure.judge.LocalCodeRunner;
+import com.xauat.oj.infrastructure.queue.JudgeQueue;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 在线代码运行接口（{@code /code}）：非判题的“试运行”能力。
@@ -22,10 +25,12 @@ public class CodeController {
     private final CurrentUser currentUser;
     private final RestClient judge0;
     private final LocalCodeRunner localRunner;
+    private final JudgeQueue queue;
     private final boolean enabled;
     private final boolean localEnabled;
 
     public CodeController(CurrentUser currentUser, RestClient.Builder builder, LocalCodeRunner localRunner,
+            JudgeQueue queue,
             @Value("${oj.judge0.url}")
             String url,
             @Value("${oj.judge0.enabled:false}")
@@ -35,6 +40,7 @@ public class CodeController {
         this.currentUser = currentUser;
         this.judge0 = builder.baseUrl(url).build();
         this.localRunner = localRunner;
+        this.queue = queue;
         this.enabled = enabled;
         this.localEnabled = localEnabled;
     }
@@ -50,9 +56,10 @@ public class CodeController {
     public ResponseEntity<?> run(@RequestHeader(value = "Authorization", required = false)
     String authorization,
             @Valid @RequestBody
-            RunRequest request) {
-        currentUser.require(authorization);
-        return execute(request);
+            RunRequest request,
+            HttpServletRequest http) {
+        var user = currentUser.require(authorization);
+        return execute(request, "user:" + user.getId());
     }
 
     /**
@@ -63,8 +70,17 @@ public class CodeController {
      */
     @PostMapping("/run/public")
     public ResponseEntity<?> publicRun(@Valid @RequestBody
-    RunRequest request) {
-        return execute(request);
+    RunRequest request,
+            HttpServletRequest http) {
+        return execute(request, "ip:" + clientIp(http));
+    }
+
+    /** 解析客户端来源 IP：优先代理透传的 X-Forwarded-For 首个地址，其次 socket 地址。 */
+    private String clientIp(HttpServletRequest http) {
+        String forwarded = http.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank())
+            return forwarded.split(",")[0].trim();
+        return http.getRemoteAddr() == null ? "unknown" : http.getRemoteAddr();
     }
 
     /**
@@ -73,7 +89,34 @@ public class CodeController {
      * @param request 运行请求
      * @return 运行结果；均未启用或远程失败返回 503
      */
-    private ResponseEntity<?> execute(RunRequest request) {
+    private ResponseEntity<?> execute(RunRequest request, String subject) {
+        String token = UUID.randomUUID().toString();
+        boolean acquired;
+        try {
+            // 与旧后端一致：主体并发上限 2、全局上限 16、租约 60 秒
+            acquired = queue.acquireExecutionSlot(subject, token, 2, 60);
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(503).body(Map.of("error", "执行服务暂时不可用"));
+        }
+        if (!acquired)
+            return ResponseEntity.status(429).header("Retry-After", "5").body(Map.of("error", "同时执行任务过多"));
+        try {
+            return doExecute(request);
+        } finally {
+            try {
+                queue.releaseExecutionSlot(subject, token);
+            } catch (RuntimeException ignored) {
+            }
+        }
+    }
+
+    /**
+     * 真正执行代码：按配置选择本地运行器或 Judge0。
+     *
+     * @param request 运行请求
+     * @return 运行结果；均未启用或远程失败返回 503
+     */
+    private ResponseEntity<?> doExecute(RunRequest request) {
         // 本地运行器仅在启用且 Judge0 关闭时作为兜底，超时固定 10 秒。
         if (localEnabled && !enabled) {
             int timeout = 10;

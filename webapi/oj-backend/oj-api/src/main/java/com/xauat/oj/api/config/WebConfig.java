@@ -38,7 +38,10 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         String location = Path.of(avatarDir).toAbsolutePath().normalize().toUri().toString();
+        // 具体前缀优先：/uploads/avatars/** 映射头像目录本身
         registry.addResourceHandler("/uploads/avatars/**").addResourceLocations(location);
+        // 兼容旧后端的通用 /uploads/<filename>（按头像目录解析），由更具体的 /uploads/avatars/** 优先匹配
+        registry.addResourceHandler("/uploads/**").addResourceLocations(location);
     }
 
     /** 注册请求 id 过滤器（order=0，全部路径），供日志与错误响应关联同一请求。 */

@@ -18,6 +18,17 @@ import java.util.UUID;
 import java.util.Set;
 
 import java.util.Map;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 /**
  * 当前用户资料接口（{@code /users/me}）：资料查询/修改、统计与头像。
@@ -143,22 +154,106 @@ public class UserController {
         if (file.isEmpty() || file.getSize() > 2 * 1024 * 1024)
             return ResponseEntity.badRequest().body(Map.of("error", "头像不能为空且不能超过 2MB"));
         String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
-        if (!Set.of("image/png", "image/jpeg", "image/webp").contains(contentType))
-            return ResponseEntity.badRequest().body(Map.of("error", "仅支持 PNG/JPEG/WebP"));
+        if (!Set.of("image/png", "image/jpeg", "image/webp", "image/gif").contains(contentType))
+            return ResponseEntity.badRequest().body(Map.of("error", "仅支持 PNG/JPEG/WebP/GIF"));
         try {
+            // 与旧后端一致：解码后统一重编码为 JPEG，顺带做像素炸弹与超大尺寸防护
+            byte[] normalized = normalizeAvatar(file.getBytes());
             Files.createDirectories(avatarRoot);
-            String extension = contentType.equals("image/png")
-                    ? ".png"
-                    : contentType.equals("image/webp") ? ".webp" : ".jpg";
-            String filename = UUID.randomUUID() + extension;
-            Files.write(avatarRoot.resolve(filename), file.getBytes());
+            String filename = UUID.randomUUID() + ".jpg";
+            Files.write(avatarRoot.resolve(filename), normalized);
             var user = currentUser.require(authorization);
             user.setAvatarUrl("/uploads/avatars/" + filename);
             users.save(user);
             return ResponseEntity.ok(Map.of("success", true, "avatar_url", user.getAvatarUrl()));
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
         } catch (Exception exception) {
             return ResponseEntity.internalServerError().body(Map.of("error", "头像保存失败"));
         }
+    }
+
+    /** 头像像素上限（与旧后端 Pillow 防护一致：1600 万像素）。 */
+    private static final long MAX_AVATAR_PIXELS = 16_000_000L;
+    /** 归一化后的最长边上限。 */
+    private static final int MAX_AVATAR_DIMENSION = 1024;
+
+    /**
+     * 解码图片并统一重编码为 JPEG。
+     *
+     * <p>先按图片头尺寸判断像素量，避免解码超大图造成内存耗尽；随后等比缩小到 1024 以内，
+     * 并在白底上合成以去除 alpha 通道后以质量 0.85 输出 JPEG。</p>
+     *
+     * @param data 原始图片字节
+     * @return JPEG 字节
+     * @throws IOException              读取/编码失败
+     * @throws IllegalArgumentException 无法识别或尺寸超限
+     */
+    private byte[] normalizeAvatar(byte[] data) throws IOException {
+        try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(data))) {
+            if (input == null)
+                throw new IllegalArgumentException("无法识别的图片");
+            var readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext())
+                throw new IllegalArgumentException("无法识别的图片");
+            ImageWriter writer = null;
+            var reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (width <= 0 || height <= 0 || (long) width * height > MAX_AVATAR_PIXELS)
+                    throw new IllegalArgumentException("图片尺寸超出限制");
+                BufferedImage decoded = reader.read(0);
+                BufferedImage scaled = scaleDown(toRgb(decoded), MAX_AVATAR_DIMENSION);
+                var iterator = ImageIO.getImageWritersByFormatName("jpeg");
+                if (!iterator.hasNext())
+                    throw new IOException("缺少 JPEG 编码器");
+                writer = iterator.next();
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                try (MemoryCacheImageOutputStream imageOutput = new MemoryCacheImageOutputStream(output)) {
+                    writer.setOutput(imageOutput);
+                    var params = writer.getDefaultWriteParam();
+                    params.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+                    params.setCompressionQuality(0.85f);
+                    writer.write(null, new IIOImage(scaled, null, null), params);
+                }
+                return output.toByteArray();
+            } finally {
+                reader.dispose();
+                if (writer != null)
+                    writer.dispose();
+            }
+        }
+    }
+
+    /** 将任意图片绘制到 RGB 画布（白底），去除 alpha 以便编码为 JPEG。 */
+    private BufferedImage toRgb(BufferedImage source) {
+        BufferedImage rgb = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = rgb.createGraphics();
+        graphics.setColor(java.awt.Color.WHITE);
+        graphics.fillRect(0, 0, source.getWidth(), source.getHeight());
+        graphics.drawImage(source, 0, 0, null);
+        graphics.dispose();
+        return rgb;
+    }
+
+    /** 等比缩小图片，使其最长边不超过 {@code maxDimension}；已足够小则原样返回。 */
+    private BufferedImage scaleDown(BufferedImage source, int maxDimension) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        int longest = Math.max(width, height);
+        if (longest <= maxDimension)
+            return source;
+        double ratio = (double) maxDimension / longest;
+        int targetWidth = Math.max(1, (int) Math.round(width * ratio));
+        int targetHeight = Math.max(1, (int) Math.round(height * ratio));
+        BufferedImage scaled = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = scaled.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        graphics.drawImage(source, 0, 0, targetWidth, targetHeight, null);
+        graphics.dispose();
+        return scaled;
     }
 
     /** 将用户实体转换为对外展示字段映射。 */

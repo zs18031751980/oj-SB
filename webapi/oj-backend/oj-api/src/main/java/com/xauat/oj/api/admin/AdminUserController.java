@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xauat.oj.core.submission.repository.SubmissionRepository;
 import com.xauat.oj.core.announcement.repository.AnnouncementRepository;
+import com.xauat.oj.core.auth.repository.AuthSessionRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,12 +27,14 @@ public class AdminUserController {
     private final UserRepository users;
     private final SubmissionRepository submissions;
     private final AnnouncementRepository announcements;
+    private final AuthSessionRepository sessions;
     public AdminUserController(CurrentUser currentUser, UserRepository users, SubmissionRepository submissions,
-            AnnouncementRepository announcements) {
+            AnnouncementRepository announcements, AuthSessionRepository sessions) {
         this.currentUser = currentUser;
         this.users = users;
         this.submissions = submissions;
         this.announcements = announcements;
+        this.sessions = sessions;
     }
 
     /**
@@ -135,6 +138,43 @@ public class AdminUserController {
     }
 
     /**
+     * 设置用户角色来源（敏感操作，等价旧 CLI 的 {@code set-role}）。
+     *
+     * <p>权限：manager。{@code provider} 表示清除本地覆盖、回退到供应商角色；
+     * 其余取值写入本地角色。角色变更后撤销该用户全部会话，避免旧令牌携带旧角色。</p>
+     *
+     * @param authorization 认证头
+     * @param id            用户 id
+     * @param request       目标角色（member/staff/manager/provider）
+     * @return 成功标记；用户不存在返回 404，非法角色返回 400
+     */
+    @PatchMapping("/users/{id}/role")
+    @Transactional
+    public ResponseEntity<?> setRole(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id, @RequestBody
+            RoleUpdateRequest request) {
+        requireManager(authorization);
+        if (!java.util.Set.of("member", "staff", "manager", "provider").contains(request.role()))
+            return ResponseEntity.badRequest().body(Map.of("error", "无效角色"));
+        var user = users.findById(id).orElse(null);
+        if (user == null)
+            return ResponseEntity.notFound().build();
+        if ("provider".equals(request.role())) {
+            // 回退到供应商角色：清除本地覆盖，按 provider_role 兜底 member
+            user.setLocalRole(null);
+            user.setRole(user.getProviderRole() == null ? "member" : user.getProviderRole());
+        } else {
+            user.setLocalRole(request.role());
+            user.setRole(request.role());
+        }
+        users.save(user);
+        sessions.revokeByUserId(id);
+        return ResponseEntity.ok(Map.of("success", true, "id", id, "role", user.getRole()));
+    }
+
+    /**
      * 删除用户（敏感操作）。
      *
      * <p>权限：manager，且为硬删除。</p>
@@ -175,5 +215,8 @@ public class AdminUserController {
         @JsonCreator
         public StatusRequest {
         }
+    }
+    /** 角色更新请求体：member/staff/manager/provider。 */
+    public record RoleUpdateRequest(String role) {
     }
 }

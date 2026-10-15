@@ -45,6 +45,10 @@ public class ContestAudit extends BaseEntity {
     public Integer getContestId() {
         return contest.getId();
     }
+    /** 返回操作人用户 ID；仅取代理标识，不触发额外查询。 */
+    public Integer getActorId() {
+        return actor == null ? null : actor.getId();
+    }
     public String getAction() {
         return action;
     }

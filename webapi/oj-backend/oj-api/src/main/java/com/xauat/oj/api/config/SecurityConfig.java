@@ -64,7 +64,9 @@ public class SecurityConfig {
                                 "/auth/exchange", "/auth/providers", "/auth/verify", "/auth/refresh", "/problems",
                                 "/problems/**", "/rankings", "/rankings/**", "/code/run/public",
                                 "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/metrics",
-                                "/actuator/metrics/**", "/actuator/prometheus", "/metrics")
+                                "/actuator/metrics/**", "/actuator/prometheus", "/metrics",
+                                // OpenAPI/Swagger 文档（对齐旧后端 /swagger/ 公开可读）
+                                "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()
                         // 仅匿名可读的展示类 GET 接口
                         .requestMatchers(HttpMethod.GET, "/announcement", "/announcement/**", "/contests",

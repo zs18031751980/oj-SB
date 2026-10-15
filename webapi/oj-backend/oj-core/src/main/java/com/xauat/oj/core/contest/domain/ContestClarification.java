@@ -65,6 +65,14 @@ public class ContestClarification extends BaseEntity {
     public Integer getClaimedBy() {
         return claimedBy;
     }
+    /** 返回提问者用户 ID；仅取关联标识，不触发额外查询。 */
+    public Integer getAuthorId() {
+        return author == null ? null : author.getId();
+    }
+    /** 返回答案是否广播给全体参赛者。 */
+    public boolean isBroadcast() {
+        return broadcast;
+    }
     /** 认领该澄清问题。 */
     public void setClaimedBy(Integer userId) {
         this.claimedBy = userId;

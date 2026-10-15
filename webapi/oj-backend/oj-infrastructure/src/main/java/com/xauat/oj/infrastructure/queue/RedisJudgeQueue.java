@@ -17,9 +17,14 @@ public class RedisJudgeQueue implements JudgeQueue {
     private static final DefaultRedisScript<Long> REJECT = new DefaultRedisScript<>(
             "redis.call('DEL',KEYS[2]); redis.call('ZREM',KEYS[3],ARGV[1]); local n=redis.call('INCR',KEYS[5]); " +
             "if n <= tonumber(ARGV[3]) then local t=redis.call('TIME'); local delay=2^(n-1); redis.call('ZADD',KEYS[6],tonumber(t[1])+delay,ARGV[1]); return n else redis.call('RPUSH',KEYS[4],ARGV[1]..':'..ARGV[2]); return n end", Long.class);
+    // 并发执行槽：同时限制「全局」（默认 16）与「主体」（ARGV[2]）两个维度，避免单用户或整体把执行器打满。
     private static final DefaultRedisScript<Long> ACQUIRE_SLOT = new DefaultRedisScript<>(
-            "local t=redis.call('TIME'); local now=tonumber(t[1]); redis.call('ZREMRANGEBYSCORE',KEYS[1],'-inf',now); "
-            + "if redis.call('ZCARD',KEYS[1]) < tonumber(ARGV[2]) then redis.call('ZADD',KEYS[1],now+tonumber(ARGV[3]),ARGV[1]); redis.call('EXPIRE',KEYS[1],tonumber(ARGV[3])+5); return 1 else return 0 end", Long.class);
+            "local t=redis.call('TIME'); local now=tonumber(t[1]); "
+            + "redis.call('ZREMRANGEBYSCORE',KEYS[1],'-inf',now); redis.call('ZREMRANGEBYSCORE',KEYS[2],'-inf',now); "
+            + "if redis.call('ZCARD',KEYS[2]) >= 16 then return 0 end; "
+            + "if redis.call('ZCARD',KEYS[1]) >= tonumber(ARGV[2]) then return 0 end; "
+            + "redis.call('ZADD',KEYS[1],now+tonumber(ARGV[3]),ARGV[1]); redis.call('EXPIRE',KEYS[1],tonumber(ARGV[3])+5); "
+            + "redis.call('ZADD',KEYS[2],now+tonumber(ARGV[3]),ARGV[1]); redis.call('EXPIRE',KEYS[2],tonumber(ARGV[3])+5); return 1", Long.class);
     private static final DefaultRedisScript<Long> ARCHIVE_DEAD = new DefaultRedisScript<>(
             "local n=0; for i=1,tonumber(ARGV[1]) do local v=redis.call('RPOP',KEYS[1]); if not v then break end; redis.call('LPUSH',KEYS[2],v); n=n+1 end; redis.call('LTRIM',KEYS[2],0,999); return n", Long.class);
     private static final DefaultRedisScript<Long> RENEW = new DefaultRedisScript<>(
@@ -99,7 +104,7 @@ public class RedisJudgeQueue implements JudgeQueue {
     @Override
     public boolean acquireExecutionSlot(String subject, String token, int limit, long ttlSeconds) {
         try {
-            Long acquired = redis.execute(ACQUIRE_SLOT, java.util.List.of("judge:execution:" + subject),
+            Long acquired = redis.execute(ACQUIRE_SLOT, java.util.List.of("judge:execution:" + subject, "judge:execution:global"),
                     token, String.valueOf(limit), String.valueOf(ttlSeconds));
             return Long.valueOf(1).equals(acquired);
         } catch (RuntimeException exception) { return true; }
@@ -107,7 +112,9 @@ public class RedisJudgeQueue implements JudgeQueue {
 
     @Override
     public void releaseExecutionSlot(String subject, String token) {
-        try { redis.opsForZSet().remove("judge:execution:" + subject, token); }
-        catch (RuntimeException ignored) { }
+        try {
+            redis.opsForZSet().remove("judge:execution:" + subject, token);
+            redis.opsForZSet().remove("judge:execution:global", token);
+        } catch (RuntimeException ignored) { }
     }
 }

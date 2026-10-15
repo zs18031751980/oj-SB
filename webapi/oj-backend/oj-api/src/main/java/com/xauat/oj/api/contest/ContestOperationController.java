@@ -45,6 +45,7 @@ public class ContestOperationController {
     private final ContestScoreboardService scoreboard;
     private final ContestParticipantRepository participants;
     private final ContestScoreboardSnapshotRepository snapshots;
+    private final EntryResolver entryResolver;
     @org.springframework.beans.factory.annotation.Value("${oj.rejudge.dual-review-min:0}")
     private int dualReviewMin;
     public ContestOperationController(CurrentUser currentUser, ContestRepository contests,
@@ -56,7 +57,8 @@ public class ContestOperationController {
             UserRepository users, ReferenceValidationJobRepository validationJobs, JudgementRepository judgements,
             ContestPermissionService permission, PackageService packageService, JuryReauthService reauth,
             ContestScoreboardService scoreboard,
-            ContestParticipantRepository participants, ContestScoreboardSnapshotRepository snapshots) {
+            ContestParticipantRepository participants, ContestScoreboardSnapshotRepository snapshots,
+            EntryResolver entryResolver) {
         this.currentUser = currentUser;
         this.contests = contests;
         this.audits = audits;
@@ -79,6 +81,7 @@ public class ContestOperationController {
         this.scoreboard = scoreboard;
         this.participants = participants;
         this.snapshots = snapshots;
+        this.entryResolver = entryResolver;
     }
 
     /**
@@ -94,14 +97,20 @@ public class ContestOperationController {
     String auth,
             @PathVariable
             Integer id) {
-        var user = manager(auth);
+        var user = requireCapability(id, auth, "control");
         var contest = lockContest(id);
         if (contest == null)
             return ResponseEntity.notFound().build();
-        contest.thaw();
-        contests.save(contest);
-        audits.save(ContestAudit.of(contest, user, "THAW", "manual thaw", "{}"));
-        return ResponseEntity.ok(Map.of("id", id, "lifecycle_state", contest.getLifecycleState()));
+        // 只有已发布且未取消的比赛才需要/允许解封
+        if (java.util.List.of("DRAFT", "READY", "CANCELLED").contains(contest.getLifecycleState()))
+            return ResponseEntity.status(409).body(Map.of("error", "比赛当前状态不能解封"));
+        if (contest.getThawedAt() == null) {
+            contest.thaw();
+            contests.save(contest);
+            audits.save(ContestAudit.of(contest, user, "THAW", "manual thaw", "{}"));
+            events.save(ContestEvent.of(contest, "state", "public", "{\"thawed\":true}"));
+        }
+        return ResponseEntity.ok(Map.of("thawed_at", contest.getThawedAt() == null ? "" : contest.getThawedAt().toString()));
     }
 
     /**
@@ -163,6 +172,11 @@ public class ContestOperationController {
     String auth,
             @PathVariable
             Integer id) {
+        // 运维健康度：具备 control 或 health 能力（manager 亦可）
+        var actorUser = currentUser.optional(auth);
+        if (actorUser == null || !(permission.allowed(id, actorUser, "control")
+                || permission.allowed(id, actorUser, "health")))
+            return ResponseEntity.status(403).body(Map.of("error", "没有此比赛的操作权限"));
         var contest = contest(id);
         if (contest == null)
             return ResponseEntity.notFound().build();
@@ -259,12 +273,23 @@ public class ContestOperationController {
     public ResponseEntity<?> audit(@RequestHeader(value = "Authorization", required = false)
     String auth,
             @PathVariable
-            Integer id) {
-        manager(auth);
+            Integer id, @RequestParam(required = false, defaultValue = "0")
+            Integer after) {
+        requireCapability(id, auth, "control");
         if (contest(id) == null)
             return ResponseEntity.notFound().build();
-        return ResponseEntity.ok(audits.findByContest_IdOrderByIdDesc(id).stream().map(a -> Map.of("id", a.getId(),
-                "action", a.getAction(), "reason", a.getReason(), "payload", a.getPayload())).toList());
+        int cursor = after == null ? 0 : Math.max(0, after);
+        var body = audits.findByContest_IdAndIdGreaterThanOrderByIdAsc(id, cursor).stream().limit(100).map(a -> {
+            Map<String, Object> value = new java.util.LinkedHashMap<>();
+            value.put("id", a.getId());
+            value.put("actor_id", a.getActorId());
+            value.put("action", a.getAction());
+            value.put("reason", a.getReason());
+            value.put("data", parseJson(a.getPayload()));
+            return (Map<String, Object>) value;
+        }).toList();
+        return ResponseEntity.ok().header("Cache-Control", "private, no-store").header("Vary", "Authorization")
+                .body(body);
     }
 
     /**
@@ -274,12 +299,27 @@ public class ContestOperationController {
      * @return 答疑列表，或 404
      */
     @GetMapping("/{id}/clarifications")
-    public ResponseEntity<?> clarificationList(@PathVariable
-    Integer id) {
+    public ResponseEntity<?> clarificationList(@RequestHeader(value = "Authorization", required = false)
+    String auth,
+            @PathVariable
+            Integer id, @RequestParam(required = false, defaultValue = "0")
+            Integer after) {
         if (contest(id) == null)
             return ResponseEntity.notFound().build();
-        return ResponseEntity
-                .ok(clarifications.findByContest_IdOrderByIdDesc(id).stream().map(this::clarificationView).toList());
+        var actor = currentUser.optional(auth);
+        // 裁判可见全部答疑；普通用户必须是参赛者，且只能看到本队伍提问或已广播的答疑
+        boolean jury = actor != null && permission.allowed(id, actor, "jury");
+        if (!jury && (actor == null || participants.findByContest_IdAndUser_Id(id, actor.getId()).isEmpty()))
+            return ResponseEntity.status(403).body(Map.of("error", "需要比赛参赛身份"));
+        Integer entryUserId = actor == null ? null : entryResolver.entryUser(id, actor.getId());
+        int cursor = after == null ? 0 : Math.max(0, after);
+        var rows = clarifications.findByContest_IdOrderByIdDesc(id).stream()
+                .filter(c -> c.getId() != null && c.getId() > cursor)
+                .filter(c -> jury || c.isBroadcast() || (entryUserId != null && entryUserId.equals(c.getAuthorId())))
+                .sorted(java.util.Comparator.comparing(ContestClarification::getId)).limit(100)
+                .map(this::clarificationView).toList();
+        return ResponseEntity.ok().header("Cache-Control", "private, no-store").header("Vary", "Authorization")
+                .body(rows);
     }
 
     /**
@@ -410,7 +450,7 @@ public class ContestOperationController {
     String auth,
             @PathVariable
             Integer id) {
-        manager(auth);
+        requireCapability(id, auth, "rejudge");
         if (contest(id) == null)
             return ResponseEntity.notFound().build();
         return ResponseEntity.ok(rejudges.findByContest_IdOrderByIdDesc(id).stream()
@@ -431,7 +471,7 @@ public class ContestOperationController {
             @PathVariable
             Integer id, @PathVariable
             Integer batchId) {
-        manager(auth);
+        requireCapability(id, auth, "rejudge");
         var batch = rejudges.findById(batchId).filter(x -> id.equals(x.getContestId())).orElse(null);
         if (batch == null)
             return ResponseEntity.notFound().build();
@@ -618,13 +658,23 @@ public class ContestOperationController {
             @PathVariable
             Integer id, @Valid @RequestBody
             RoleRequest request) {
-        manager(auth);
+        var actorUser = requireCapability(id, auth, "control");
+        if (!java.util.Set.of("director", "jury", "setter", "operator", "none").contains(request.role()))
+            return ResponseEntity.badRequest().body(Map.of("error", "无效比赛角色"));
         var contest = lockContest(id);
         var user = users.findById(request.userId()).orElse(null);
         if (contest == null || user == null)
             return ResponseEntity.notFound().build();
-        var role = roles.save(ContestRole.create(contest, user, request.role()));
-        return ResponseEntity.status(201).body(Map.of("user_id", role.getUserId(), "role", role.getRole()));
+        // 幂等覆盖：同一用户在同一比赛只保留一条角色记录
+        var role = roles.findByContest_IdAndUser_Id(id, user.getId())
+                .map(existing -> {
+                    existing.setRole(request.role());
+                    return existing;
+                }).orElseGet(() -> ContestRole.create(contest, user, request.role()));
+        roles.save(role);
+        audits.save(ContestAudit.of(contest, actorUser, "ROLE_UPDATE", "分配比赛角色",
+                "{\"user_id\":" + user.getId() + ",\"role\":" + json(request.role()) + "}"));
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     /**
@@ -804,10 +854,13 @@ public class ContestOperationController {
             @PathVariable
             Integer id, @RequestBody
             RulesRequest request) {
-        var user = manager(auth);
+        var user = requireCapability(id, auth, "control");
         var contest = lockContest(id);
         if (contest == null)
             return ResponseEntity.notFound().build();
+        // 与旧后端一致：发布后规则锁定，只允许 DRAFT/READY 修改
+        if (!java.util.List.of("DRAFT", "READY").contains(contest.getLifecycleState()))
+            return ResponseEntity.status(409).body(Map.of("error", "发布后比赛规则已锁定"));
         contest.updateRules(request.rulesVersion(), request.allowedLanguages(), request.penaltyTime(),
                 request.activeSubmissionLimit(), request.freezeTime());
         contests.save(contest);
@@ -864,11 +917,21 @@ public class ContestOperationController {
         value.put("id", item.getId());
         value.put("question", item.getQuestion());
         value.put("answer", item.getAnswer() == null ? "" : item.getAnswer());
+        value.put("claimed_by", item.getClaimedBy());
         return value;
     }
     private static String json(String value) {
         return "\"" + (value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n"))
                 + "\"";
+    }
+    /** 复用同一个 ObjectMapper 解析审计载荷，失败时回退原始字符串。 */
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
+    private static Object parseJson(String value) {
+        try {
+            return MAPPER.readValue(value == null ? "{}" : value, Object.class);
+        } catch (Exception exception) {
+            return value;
+        }
     }
     private static final java.util.Set<String> VALID_REJUDGE_STATUSES = java.util.Set.of("AC", "WA", "CE", "TLE", "MLE",
             "OLE", "RE", "SIGSEGV", "SIGSYS", "Partial");

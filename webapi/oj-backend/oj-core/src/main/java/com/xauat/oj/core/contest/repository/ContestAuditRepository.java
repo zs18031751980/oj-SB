@@ -16,6 +16,15 @@ public interface ContestAuditRepository extends JpaRepository<ContestAudit, Inte
     List<ContestAudit> findByContest_IdOrderByIdDesc(Integer contestId);
 
     /**
+     * 按游标增量拉取某赛事的审计记录，按主键正序。
+     *
+     * @param contestId 赛事 ID
+     * @param id        游标（仅返回主键大于该值的记录）
+     * @return 审计记录列表，无数据时返回空列表
+     */
+    List<ContestAudit> findByContest_IdAndIdGreaterThanOrderByIdAsc(Integer contestId, Integer id);
+
+    /**
      * 增量查询主键大于指定游标的最多 1000 条审计记录，按主键正序。
      *
      * @param id 游标，仅返回主键大于该值的记录

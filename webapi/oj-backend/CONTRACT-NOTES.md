@@ -142,13 +142,21 @@
 7. **OIDC 元数据发现 / PKCE**：`OAuthProviderRegistry` 支持 `server-metadata-url`/`issuer` 发现端点；`oj.oauth.pkce` 开启 S256 PKCE。
 8. **编码**：Dockerfile 固定 `file.encoding=UTF-8`，避免非 UTF-8 路径失败。
 
-## 未移植（有明确理由）
-- **判题公平调度**（原 `contest_judge_queue` 按 contest+entry 轮转）：属于可选优化，文档要求的原子 claim/lease/attempt fencing 已实现；公平调度需更改队列消息格式（现队列消息为 jobId）。
-- **跨提交编译缓存**（`compile_cache.py`）：Judge0/沙箱已满足文档“一次提交只编译一次”；跨提交复用为性能优化。
-- **队伍 team_id 列**：已加列；entry 分组在读取时按成员→队长归并（未在写入时冗余 team_id，语义等价）。
-- **OIDC 元数据发现/claims 合并/PKCE**：文档要求的 OAuth→一次性 grant→exchange 流程已实现；发现与 PKCE 为增强项。
-- **结构化 JSON 日志与脱敏**（`logger_service.py`）：属日志基础设施，按部署需要另行配置。
+## 第十一轮：对照旧后端补齐剩余缺口
+1. **公告分级可见性**：`AnnouncementVisibility` 实现 manager/staff/member 的 permission 过滤（未知 permission 不公开），create/update 校验 permission 取值。
+2. **比赛答疑**：`GET /contests/{id}/clarifications` 增加鉴权（裁判或参赛者）、按 entry 过滤（本人/队伍或广播）、`after` 游标与 `claimed_by`。
+3. **比赛内能力校验**：thaw/audit/rules/roles/rejudge 列表改用比赛内 capability（control/jury/rejudge），health 允许 control 或 health；rules 仅 DRAFT/READY 可改；角色改为幂等覆盖并校验取值。
+4. **执行并发槽**：`/code/run` 与 `/code/run/public` 按用户/来源 IP 获取执行槽（主体 2、全局 16、租约 60s），超出返回 429。
+5. **判题可用性探针**：`GET /healthz/judge?pool=` 按池检查新鲜且接单的 worker。
+6. **改角色入口**：`PATCH /admin/users/{id}/role` 与 CLI `--set-role=<id>:<role>`（等价旧 `manage.py set-role`，变更后撤销会话）。
+7. **头像规范化**：解码后等比缩放到 ≤1024、像素上限 1600 万、统一重编码 JPEG(0.85)，支持 PNG/JPEG/WebP/GIF。
+8. **OpenAPI/Swagger**：接入 springdoc（`/swagger-ui/**`、`/v3/api-docs/**`）；`/uploads/**` 增加通用静态映射。
+9. **team_id 冗余**：`contest_submissions.team_id` 在提交与复判克隆时写入，entry 归并在读取与写入两侧一致。
+10. **判题公平调度**：`ContestOutboxDispatcher` 按 contest+entry 分组轮转派发，避免单场/单队独占队列。
+11. **跨提交编译缓存**：`CompileCache` 内容寻址（编译命令+源码 SHA-256）+ 条目上限裁剪，沙箱执行器命中即恢复产物、跳过编译。
+12. **运维脚本**：`deploy/` 增加 preflight/smoke/check_release/promote_release/set-role/archive_wal/audit_database/recovery/restored_smoke/calibrate_judge、alerts.yaml、nginx.conf.example、postgresql-recovery.conf.example。
 
 ## 仍需注意（环境相关）
-- Docker 沙箱与 Testcontainers 均需 Docker 守护进程；本机无 docker，未能实机执行，已在配置层验证装配。
+- 全量迁移后的测试：后端 `mvn test` 通过；前端 Playwright 25 项通过。旧 pytest 套件未逐条移植，新增能力以 Java 单测（AnnouncementVisibility/CompileCache/fairOrder）+ E2E 覆盖。
+- Docker 沙箱与 Testcontainers 均需 Docker 守护进程；本机无 docker，未做沙箱实机执行，已在配置层验证装配。
 - Judge0 与沙箱为两种可切换执行后端，生产按 `oj.judge.executor` 选择。

@@ -15,6 +15,7 @@ import com.xauat.oj.core.problem.repository.TestcaseRepository;
 import com.xauat.oj.core.submission.domain.Submission;
 import com.xauat.oj.core.submission.repository.SubmissionRepository;
 import com.xauat.oj.infrastructure.judge.Checker;
+import com.xauat.oj.infrastructure.judge.CompileCache;
 import com.xauat.oj.infrastructure.judge.DockerSandboxClient;
 import com.xauat.oj.infrastructure.judge.JudgeVerdict;
 import com.xauat.oj.infrastructure.judge.OutputChecker;
@@ -44,15 +45,18 @@ public class SandboxJudgeExecutor implements JudgeExecutor {
     private final Checker checker;
     private final com.xauat.oj.infrastructure.queue.JudgeQueue queue;
     private final ObjectMapper mapper;
+    private final CompileCache compileCache;
 
     public SandboxJudgeExecutor(SubmissionRepository submissions, ContestSubmissionRepository contestSubmissions,
                                 TestcaseRepository testcases, ContestTestcaseRepository contestTestcases,
                                 ContestProblemRepository contestProblems, ContestRepository contests,
                                 JudgementRepository judgements, DockerSandboxClient sandbox, Checker checker,
-                                com.xauat.oj.infrastructure.queue.JudgeQueue queue, ObjectMapper mapper) {
+                                com.xauat.oj.infrastructure.queue.JudgeQueue queue, ObjectMapper mapper,
+                                CompileCache compileCache) {
         this.submissions = submissions; this.contestSubmissions = contestSubmissions; this.testcases = testcases;
         this.contestTestcases = contestTestcases; this.contestProblems = contestProblems; this.contests = contests;
         this.judgements = judgements; this.sandbox = sandbox; this.checker = checker; this.queue = queue; this.mapper = mapper;
+        this.compileCache = compileCache;
     }
 
     private record Language(String sourceName, List<String> compile, List<String> run) {}
@@ -199,15 +203,24 @@ public class SandboxJudgeExecutor implements JudgeExecutor {
         return outcome;
     }
 
-    /** 返回编译错误信息；null 表示编译成功或无需编译。 */
+    /** 返回编译错误信息；null 表示编译成功或无需编译。命中编译缓存时直接恢复产物、跳过编译。 */
     private String compile(Language language, String code, Path work) {
+        if (language.compile().isEmpty()) {
+            // 解释型语言无需编译，仅写入源码
+            writeSource(language, code, work);
+            return null;
+        }
+        String cacheKey = compileCache.key(language.compile(), code);
+        if (compileCache.materialize(cacheKey, work))
+            return null;
         writeSource(language, code, work);
-        if (language.compile().isEmpty()) return null;
         DockerSandboxClient.Result result = sandbox.execute(language.compile(), "", 20, 1024, work, false, 2 * 1024 * 1024);
         if (result.returncode() != 0) {
             String error = result.stderr() == null || result.stderr().isBlank() ? result.stdout() : result.stderr();
             return error == null || error.isBlank() ? "Compilation Error" : error;
         }
+        // 编译成功：缓存产物（排除源文件），供后续相同源码复用
+        compileCache.store(cacheKey, work, language.sourceName());
         return null;
     }
 

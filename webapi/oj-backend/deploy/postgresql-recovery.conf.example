@@ -1,0 +1,19 @@
+# PostgreSQL 恢复演练配置示例（对齐旧后端 deploy/postgresql-recovery.conf.example）。
+# 用于在独立实例上做时间点恢复（PITR）演练，验证备份与 WAL 归档可用。
+[recovery]
+# 备份/归档来源
+wal_archive_dir = /var/lib/postgresql/wal-archive
+base_backup_dir = /var/lib/postgresql/base-backup
+
+# 恢复目标实例
+restore_target_dir = /var/lib/postgresql/recovery-data
+restore_port = 55432
+restore_user = postgres
+
+# 恢复到的时间点（ISO8601，留空表示恢复到最新可用 WAL）
+recovery_target_time =
+
+# 演练后校验（restored_smoke.sh 使用）
+smoke_api_base = http://127.0.0.1:6173
+smoke_user = smoke
+smoke_pass =

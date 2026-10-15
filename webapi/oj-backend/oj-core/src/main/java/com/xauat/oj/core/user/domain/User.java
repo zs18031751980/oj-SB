@@ -109,6 +109,10 @@ public class User extends BaseEntity {
     public void setProviderRole(String providerRole) {
         this.providerRole = providerRole;
     }
+    /** 设置本地角色覆盖值；传 {@code null} 表示回退使用 provider_role。 */
+    public void setLocalRole(String localRole) {
+        this.localRole = localRole;
+    }
     public void setUsername(String username) {
         this.username = username;
     }

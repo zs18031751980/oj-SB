@@ -11,6 +11,7 @@ import com.xauat.oj.core.contest.repository.ContestParticipantRepository;
 import com.xauat.oj.core.contest.repository.ContestProblemRepository;
 import com.xauat.oj.core.contest.repository.ContestRepository;
 import com.xauat.oj.core.contest.repository.ContestSubmissionRepository;
+import com.xauat.oj.core.contest.repository.ContestTeamMemberRepository;
 import com.xauat.oj.core.contest.repository.ContestTestcaseRepository;
 import com.xauat.oj.core.contest.repository.JudgementRepository;
 import com.fasterxml.jackson.annotation.JsonAlias;
@@ -55,13 +56,15 @@ public class ContestController {
     private final PackageService packageService;
     private final EntryResolver entryResolver;
     private final com.xauat.oj.api.submission.SubmissionCache submissionCache;
+    private final ContestTeamMemberRepository teamMembers;
 
     public ContestController(CurrentUser currentUser, ContestRepository contests,
             ContestParticipantRepository participants, ContestProblemRepository problems,
             ContestSubmissionRepository submissions, ContestJudgeOutboxRepository outboxes, ObjectMapper mapper,
             ContestTestcaseRepository testcases, ContestScoreboardService scoreboard,
             JudgementRepository judgements, ContestEventRepository events, PackageService packageService,
-            EntryResolver entryResolver, com.xauat.oj.api.submission.SubmissionCache submissionCache) {
+            EntryResolver entryResolver, com.xauat.oj.api.submission.SubmissionCache submissionCache,
+            ContestTeamMemberRepository teamMembers) {
         this.currentUser = currentUser;
         this.contests = contests;
         this.participants = participants;
@@ -76,6 +79,7 @@ public class ContestController {
         this.packageService = packageService;
         this.entryResolver = entryResolver;
         this.submissionCache = submissionCache;
+        this.teamMembers = teamMembers;
     }
 
     /**
@@ -462,8 +466,12 @@ public class ContestController {
                 return ResponseEntity.status(201).body(submissionView(replay.get(), true));
         }
         String jobId = UUID.randomUUID().toString();
-        var submission = submissions.save(com.xauat.oj.core.contest.domain.ContestSubmission.create(contest, user,
-                problem, request.code(), request.language(), jobId, idempotencyKey));
+        var submission = com.xauat.oj.core.contest.domain.ContestSubmission.create(contest, user,
+                problem, request.code(), request.language(), jobId, idempotencyKey);
+        // 冗余写入队伍归属，便于后续按 entry 归并榜单与状态
+        submission.setTeamId(teamMembers.findByContest_IdAndUser_Id(id, user.getId())
+                .map(com.xauat.oj.core.contest.domain.ContestTeamMember::getTeamId).orElse(null));
+        submissions.save(submission);
         // outbox 模式：与提交同事务落库，随后由 ContestOutboxDispatcher 异步投递判题队列
         outboxes.save(com.xauat.oj.core.contest.domain.ContestJudgeOutbox.of(submission));
         return ResponseEntity.status(201).body(submissionView(submission, false));

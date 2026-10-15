@@ -47,4 +47,8 @@ public class ContestRole extends BaseEntity {
     public String getRole() {
         return role;
     }
+    /** 覆盖角色标识，用于同用户同比赛角色的幂等更新。 */
+    public void setRole(String role) {
+        this.role = role;
+    }
 }

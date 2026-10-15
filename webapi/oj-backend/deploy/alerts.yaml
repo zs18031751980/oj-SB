@@ -1,0 +1,39 @@
+# Prometheus 告警规则（对齐旧后端 deploy/alerts.yaml），指标来自 /actuator/prometheus。
+groups:
+  - name: oj-backend
+    rules:
+      - alert: OjApiDown
+        expr: up{job="oj-api"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "oj-api 实例不可用" }
+
+      - alert: OjNoJudgeWorker
+        expr: oj_judge_workers_alive == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "无存活判题 worker，提交将堆积" }
+
+      - alert: OjJudgeQueueBacklog
+        expr: max by (queue) (oj_judge_queue_size) > 100
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "判题队列积压（{{ $labels.queue }}）" }
+
+      - alert: OjJudgeDeadLetter
+        expr: max by (queue) (oj_judge_queue_dead) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "出现判题死信（{{ $labels.queue }}）" }
+
+      - alert: OjOutboxPending
+        expr: max(oj_outbox_pending) > 50
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "outbox 待派发积压" }
+
+      - alert: OjDependencyDown
+        expr: min(oj_dependency_up) == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "依赖不可用（Redis/PostgreSQL）" }

@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -91,6 +92,61 @@ public class HealthController {
         } catch (RuntimeException exception) {
             return ResponseEntity.status(503).body(body("database unavailable", request));
         }
+    }
+
+    /**
+     * 判题 worker 可用性探针：按池检查是否存在新鲜且接单的 worker。
+     *
+     * <p>与旧后端一致，时间窗为「过去 5 秒至未来 45 秒内」视为新鲜，
+     * 且要求 worker 的池匹配（{@code all} 可服务任意池）且未 drain、正在接单。</p>
+     *
+     * @param pool    查询的 worker 池，默认 contest
+     * @param request 当前请求
+     * @return 可用返回 200，否则 503；非法池返回 400
+     */
+    @GetMapping("/healthz/judge")
+    public ResponseEntity<Map<String, Object>> judge(@RequestParam(defaultValue = "contest")
+    String pool, HttpServletRequest request) {
+        if (!Set.of("contest", "practice", "rejudge", "validation", "all").contains(pool))
+            return ResponseEntity.badRequest().body(body("invalid pool", request));
+        boolean alive;
+        try {
+            alive = judgeAvailable(pool);
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(503).body(body("unavailable", request));
+        }
+        return alive ? ResponseEntity.ok(body("ok", request))
+                : ResponseEntity.status(503).body(body("unavailable", request));
+    }
+
+    /** 判断指定池是否存在可接单的新鲜 worker；Redis 异常时保守返回 false。 */
+    private boolean judgeAvailable(String pool) {
+        long now = Instant.now().getEpochSecond();
+        Set<String> keys = redis.keys("judge:worker:*");
+        if (keys == null)
+            return false;
+        for (String key : keys) {
+            String value = redis.opsForValue().get(key);
+            if (value == null)
+                continue;
+            com.fasterxml.jackson.databind.JsonNode node;
+            try {
+                node = mapper.readTree(value);
+            } catch (Exception parseError) {
+                continue;
+            }
+            long delta = now - node.path("heartbeat_unix").asLong(0);
+            // 与旧后端保持同一新鲜窗口：允许时钟轻微前偏，超过 45 秒视为过期
+            if (delta < -5 || delta > 45)
+                continue;
+            String workerPool = node.path("pool").asText("all");
+            if (!(workerPool.equals(pool) || "all".equals(workerPool)))
+                continue;
+            if (!node.path("accepting_jobs").asBoolean(false) || node.path("draining").asBoolean(false))
+                continue;
+            return true;
+        }
+        return false;
     }
 
     /** 统计心跳时间在新鲜阈值内的 worker 数量；Redis 异常时保守返回 0。 */

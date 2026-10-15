@@ -132,6 +132,9 @@ public class ContestSubmission extends BaseEntity {
     /** 重判时原始提交的尝试次数。 */
     @Column(name = "rejudge_base_attempt")
     private Integer rejudgeBaseAttempt;
+    /** 提交所属队伍 ID 冗余（用户属于队伍时写入，便于榜单/状态按 entry 快速归并）。 */
+    @Column(name = "team_id")
+    private Integer teamId;
     protected ContestSubmission() {
     }
     /** 创建比赛提交：复制题目序号并初始化入队/提交时间。 */
@@ -168,10 +171,20 @@ public class ContestSubmission extends BaseEntity {
         item.contestEligible = source.contestEligible;
         item.rejudgeOf = source;
         item.rejudgeBaseAttempt = source.attemptId;
+        // 冗余队伍归属随原提交复制，保持 entry 归并一致
+        item.teamId = source.teamId;
         return item;
     }
     public int getAttemptId() {
         return attemptId;
+    }
+    /** 返回冗余的队伍 ID（可能为 null，表示个人参赛）。 */
+    public Integer getTeamId() {
+        return teamId;
+    }
+    /** 设置冗余的队伍 ID。 */
+    public void setTeamId(Integer teamId) {
+        this.teamId = teamId;
     }
     public Integer getContestProblemId() {
         return contestProblem == null ? null : contestProblem.getId();
