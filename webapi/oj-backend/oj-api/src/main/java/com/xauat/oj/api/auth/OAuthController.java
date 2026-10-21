@@ -14,8 +14,12 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.*;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -46,6 +50,8 @@ public class OAuthController {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     /** 单次外部请求的整体超时。 */
     private static final Duration EXTERNAL_TIMEOUT = Duration.ofSeconds(10);
+    /** 外部响应体上限（1 MiB），防止异常上游返回超大内容耗尽内存。 */
+    private static final int MAX_EXTERNAL_BODY = 1024 * 1024;
 
     /** 注入 Redis、用户/Grant 仓库、JWT、供应商注册表、会话服务与用户同步器，并读取前端地址与 PKCE 开关。 */
     public OAuthController(StringRedisTemplate redis, UserRepository users, OAuthGrantRepository grants, JwtService jwt,
@@ -85,14 +91,33 @@ public class OAuthController {
     String provider, @RequestParam(defaultValue = "/")
     String next,
             HttpServletResponse response) throws Exception {
-        String authorization = providers.property(provider, "authorization-uri");
-        if (authorization == null) {
+        String redirect = beginAuthorization(provider, next, null);
+        if (redirect == null) {
             response.sendError(503, "OAuth provider 未配置");
             return;
         }
+        response.sendRedirect(redirect);
+    }
+
+    /**
+     * 生成并登记一次授权请求，返回供应商授权地址。
+     *
+     * <p>统一 state 与 PKCE 的生成、Redis 存储和回调校验入口，供浏览器 GET 登录与
+     * API 客户端 {@code POST /auth/login} 复用，避免出现“生成了 state 却没有落库”的分支。</p>
+     *
+     * @param provider    供应商标识
+     * @param next        登录完成后的前端跳转路径
+     * @param redirectUri 已校验的回调地址；{@code null} 表示使用供应商配置
+     * @return 授权地址；供应商未配置时返回 {@code null}
+     * @throws Exception 随机数或摘要算法不可用
+     */
+    public String beginAuthorization(String provider, String next, String redirectUri) throws Exception {
+        if (providers.property(provider, "authorization-uri") == null)
+            return null;
         // state 同时绑定 provider 与 next，回调时校验来源并恢复跳转目标，5 分钟过期防重放
         String state = UUID.randomUUID().toString();
-        redis.opsForValue().set("oj:oauth:state:" + state, provider + "\n" + next, Duration.ofMinutes(5));
+        String target = next == null || next.isBlank() ? "/" : next;
+        redis.opsForValue().set("oj:oauth:state:" + state, provider + "\n" + target, Duration.ofMinutes(5));
         String challenge = null;
         if (pkceEnabled) {
             // PKCE：随机 verifier 只存服务端，把其 SHA-256 挑战值发给供应商，回调时用 verifier 兑换
@@ -101,8 +126,7 @@ public class OAuthController {
                     .digest(verifier.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
             redis.opsForValue().set("oj:oauth:pkce:" + state, verifier, Duration.ofMinutes(5));
         }
-        String redirect = providers.authorizationUrl(provider, null, state, challenge);
-        response.sendRedirect(redirect);
+        return providers.authorizationUrl(provider, redirectUri, state, challenge);
     }
 
     /**
@@ -215,8 +239,7 @@ public class OAuthController {
                     .timeout(EXTERNAL_TIMEOUT)
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(form)).build();
-            JsonNode token = mapper.readTree(
-                    http.send(tokenRequest, HttpResponse.BodyHandlers.ofString()).body());
+            JsonNode token = mapper.readTree(send(tokenRequest));
             String access = token.path("access_token").asText();
             if (access.isBlank())
                 return ResponseEntity.status(401).body(Map.of("error", "提供商认证失败"));
@@ -224,8 +247,7 @@ public class OAuthController {
             HttpRequest infoRequest = HttpRequest.newBuilder(URI.create(providers.property(provider, "userinfo-uri")))
                     .timeout(EXTERNAL_TIMEOUT)
                     .header("Authorization", "Bearer " + access).GET().build();
-            JsonNode profile = mapper.readTree(
-                    http.send(infoRequest, HttpResponse.BodyHandlers.ofString()).body());
+            JsonNode profile = mapper.readTree(send(infoRequest));
             String providerId = profile.path("sub").asText(profile.path("id").asText());
             String email = profile.path("email").asText("");
             String username = profile.path("preferred_username").asText(profile.path("login").asText(email));
@@ -262,6 +284,30 @@ public class OAuthController {
         return body;
     }
 
+    /**
+     * 发送外部 HTTP 请求并读取响应体，限制最大字节数。
+     *
+     * @param request 已设置超时的请求
+     * @return 响应体字符串
+     * @throws IOException          网络错误或响应体超限
+     * @throws InterruptedException 线程被中断
+     */
+    private String send(HttpRequest request) throws IOException, InterruptedException {
+        HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        try (InputStream body = response.body(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int total = 0;
+            int read;
+            while ((read = body.read(buffer)) >= 0) {
+                total += read;
+                if (total > MAX_EXTERNAL_BODY)
+                    throw new IOException("外部响应体超过限制");
+                output.write(buffer, 0, read);
+            }
+            return output.toString(StandardCharsets.UTF_8);
+        }
+    }
+
     /** 用授权码（含可选 PKCE verifier）向供应商 token 端点换取 access_token，再拉取用户信息。 */
     private JsonNode exchange(String provider, String code, String codeVerifier) throws Exception {
         String tokenUri = providers.property(provider, "token-uri"),
@@ -275,12 +321,12 @@ public class OAuthController {
                 .timeout(EXTERNAL_TIMEOUT)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form)).build();
-        JsonNode token = mapper.readTree(http.send(req, HttpResponse.BodyHandlers.ofString()).body());
+        JsonNode token = mapper.readTree(send(req));
         String access = token.path("access_token").asText();
         HttpRequest info = HttpRequest.newBuilder(URI.create(providers.property(provider, "userinfo-uri")))
                 .timeout(EXTERNAL_TIMEOUT)
                 .header("Authorization", "Bearer " + access).GET().build();
-        return mapper.readTree(http.send(info, HttpResponse.BodyHandlers.ofString()).body());
+        return mapper.readTree(send(info));
     }
 
     /** URL 安全、无填充的 Base64 编码（用于 PKCE 值）。 */

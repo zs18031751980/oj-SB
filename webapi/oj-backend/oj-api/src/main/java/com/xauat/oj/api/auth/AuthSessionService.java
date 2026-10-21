@@ -4,8 +4,9 @@ import com.xauat.oj.common.auth.JwtService;
 import com.xauat.oj.core.auth.domain.AuthSession;
 import com.xauat.oj.core.auth.repository.AuthSessionRepository;
 import com.xauat.oj.core.user.domain.User;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -133,12 +134,12 @@ public class AuthSessionService {
      * @param remember     是否长期保存
      */
     public void setRefreshCookie(HttpServletResponse response, String refreshToken, boolean remember) {
-        Cookie cookie = new Cookie(REFRESH_COOKIE, refreshToken);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(cookieSecure);
-        cookie.setPath(COOKIE_PATH);
-        cookie.setMaxAge(remember ? (int) refreshTtlSeconds : -1);
-        response.addCookie(cookie);
+        // 显式设置 SameSite=Lax；Secure 由配置控制，生产环境由启动自检强制开启
+        var cookie = ResponseCookie.from(REFRESH_COOKIE, refreshToken)
+                .httpOnly(true).secure(cookieSecure).path(COOKIE_PATH).sameSite("Lax");
+        if (remember)
+            cookie.maxAge(java.time.Duration.ofSeconds(refreshTtlSeconds));
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.build().toString());
     }
 
     /**
@@ -147,12 +148,9 @@ public class AuthSessionService {
      * @param response 响应
      */
     public void clearRefreshCookie(HttpServletResponse response) {
-        Cookie cookie = new Cookie(REFRESH_COOKIE, "");
-        cookie.setHttpOnly(true);
-        cookie.setSecure(cookieSecure);
-        cookie.setPath(COOKIE_PATH);
-        cookie.setMaxAge(0);
-        response.addCookie(cookie);
+        var cookie = ResponseCookie.from(REFRESH_COOKIE, "")
+                .httpOnly(true).secure(cookieSecure).path(COOKIE_PATH).maxAge(java.time.Duration.ZERO).sameSite("Lax");
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.build().toString());
     }
 
     /**

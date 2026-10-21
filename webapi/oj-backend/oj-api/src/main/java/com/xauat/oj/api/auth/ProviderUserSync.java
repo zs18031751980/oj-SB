@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.xauat.oj.core.auth.repository.AuthSessionRepository;
 import com.xauat.oj.core.user.domain.User;
 import com.xauat.oj.core.user.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,10 +17,36 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProviderUserSync {
     private final UserRepository users;
     private final AuthSessionRepository sessions;
+    /** 允许其角色声明影响本地角色的可信供应商列表；默认为空（一律 member）。 */
+    private final java.util.Set<String> trustedRoleProviders;
+    /** 是否允许可信供应商直接授予 manager；默认关闭，最多映射为 staff。 */
+    private final boolean allowManagerFromProvider;
 
-    public ProviderUserSync(UserRepository users, AuthSessionRepository sessions) {
+    public ProviderUserSync(UserRepository users, AuthSessionRepository sessions,
+            @Value("${oj.oauth.trusted-role-providers:}") String trustedRoleProviders,
+            @Value("${oj.oauth.allow-manager-from-provider:false}") boolean allowManagerFromProvider) {
         this.users = users;
         this.sessions = sessions;
+        this.trustedRoleProviders = java.util.Arrays
+                .stream(trustedRoleProviders == null ? new String[0] : trustedRoleProviders.split(","))
+                .map(String::trim).filter(value -> !value.isBlank())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        this.allowManagerFromProvider = allowManagerFromProvider;
+    }
+
+    /**
+     * 计算供应商声明可授予的本地角色。
+     *
+     * <p>默认只授予最低权限 member；仅当供应商在可信列表中时才采纳其角色声明，
+     * 且除非显式允许，供应商最多只能授予 staff，管理员仍需本地授权流程。</p>
+     */
+    String effectiveProviderRole(String provider, JsonNode profile) {
+        String raw = OidcClaims.highestRole(profile);
+        if (!trustedRoleProviders.contains(provider))
+            return "member";
+        if (!allowManagerFromProvider && "manager".equals(raw))
+            return "staff";
+        return raw;
     }
 
     /**
@@ -36,7 +63,7 @@ public class ProviderUserSync {
     @Transactional
     public User sync(String provider, String providerId, JsonNode profile, String username, String email,
             String avatar) {
-        String incomingRole = OidcClaims.highestRole(profile);
+        String incomingRole = effectiveProviderRole(provider, profile);
         Boolean status = OidcClaims.accountStatus(profile);
         var existing = users.findByProviderAndProviderId(provider, providerId);
         if (existing.isPresent()) {

@@ -138,6 +138,9 @@ OJ_OAUTH_IOSCLUB_CLIENT_ID=...
 OJ_OAUTH_IOSCLUB_CLIENT_SECRET=...
 OJ_OAUTH_GITHUB_CLIENT_ID=...
 OJ_OAUTH_GITHUB_CLIENT_SECRET=...
+# 仅受信任供应商的角色声明可影响本地角色；为空则新用户一律 member
+OJ_OAUTH_TRUSTED_ROLE_PROVIDERS=
+OJ_OAUTH_ALLOW_MANAGER_FROM_PROVIDER=false
 
 # 判题（生产）
 OJ_JUDGE_ENABLED=true
@@ -181,6 +184,9 @@ OJ_ALLOW_LOCAL_JUDGE=true OJ_JUDGE_EXECUTOR=local ./start.sh up
 7. **可信代理**：仅当反向代理会覆盖 `X-Forwarded-For` 时设置 `OJ_TRUST_FORWARDED_FOR=true`，并用 `OJ_TRUSTED_PROXIES` 限定可信对端；匿名执行在限流组件故障时默认拒绝。
 8. **路径安全**：学习资源 id 在规范化后必须位于资源根目录内，已对 `..`、绝对路径与编码斜杠做回归测试。
 9. **运维脚本**：`webapi/oj-backend/deploy/` 提供 `preflight.sh`、`smoke.sh`、`check_release.sh`、`promote_release.sh`、`set-role.sh`、`archive_wal.sh`、`audit_database.sh`、`recovery.sh`、`restored_smoke.sh`、`calibrate_judge.sh`，以及 `alerts.yaml`、`nginx.conf.example`、`postgresql-recovery.conf.example`。
+10. **比赛题面可见性**：比赛详情与题面接口共用同一套判断；草稿/就绪/已取消对普通用户不可见，私有比赛仅参赛者或管理/裁判可读；公开已发布比赛允许匿名读取。
+11. **OIDC 角色信任**：`OJ_OAUTH_TRUSTED_ROLE_PROVIDERS` 为空时新用户一律 `member`；可信供应商默认最多授予 `staff`，`manager` 需显式 `OJ_OAUTH_ALLOW_MANAGER_FROM_PROVIDER=true` 或本地授权。
+12. **账号生命周期**：停用账号立即撤销全部会话；重新启用不恢复旧会话。刷新 Cookie 使用 `HttpOnly + SameSite=Lax`，生产强制 `OJ_COOKIE_SECURE=true`。
 
 ### 数据库与迁移
 

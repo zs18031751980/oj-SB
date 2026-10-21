@@ -54,6 +54,10 @@ oj:
     pkce: ${OJ_OAUTH_PKCE:false}
     # 第三方 OAuth2 密码模式兼容开关；如无必要建议关闭，仅使用授权码流程
     password-grant-enabled: ${OJ_OAUTH_PASSWORD_GRANT_ENABLED:true}
+    # 仅这些供应商的角色声明可影响本地角色；为空时新用户一律 member
+    trusted-role-providers: ${OJ_OAUTH_TRUSTED_ROLE_PROVIDERS:}
+    # 是否允许可信供应商直接授予 manager；默认 false（最多 staff，管理员走本地授权）
+    allow-manager-from-provider: ${OJ_OAUTH_ALLOW_MANAGER_FROM_PROVIDER:false}
   mfa:
     require: ${JURY_REQUIRE_MFA:false}
     totp-secrets: ${JURY_TOTP_SECRETS:}

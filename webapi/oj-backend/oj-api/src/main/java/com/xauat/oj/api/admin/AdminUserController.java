@@ -49,11 +49,9 @@ public class AdminUserController {
     public Map<String, Object> stats(@RequestHeader(value = "Authorization", required = false)
     String authorization) {
         requireManager(authorization);
-        long active = users.findAll().stream().filter(User::isActive).count();
-        // 最近 5 个用户与公告，按 id 倒序近似“最新”。
-        var recentUsers = users.findAll().stream()
-                .sorted(java.util.Comparator.comparing(User::getId, java.util.Comparator.reverseOrder())).limit(5)
-                .map(this::view).toList();
+        // 统计与最近用户均下推到数据库，避免全量加载
+        long active = users.countByActiveTrue();
+        var recentUsers = users.findTop5ByOrderByIdDesc().stream().map(this::view).toList();
         var recentAnnouncements = announcements.findAll().stream()
                 .sorted(java.util.Comparator.comparing(
                         com.xauat.oj.core.announcement.domain.Announcement::getId, java.util.Comparator.reverseOrder()))
@@ -94,22 +92,37 @@ public class AdminUserController {
             @RequestParam(required = false)
             String status) {
         requireManager(authorization);
-        var matched = users.findAll().stream()
-                .filter(u -> search == null || search.isBlank()
-                        || (u.getUsername() != null && u.getUsername().toLowerCase().contains(search.toLowerCase()))
-                        || (u.getEmail() != null && u.getEmail().toLowerCase().contains(search.toLowerCase())))
-                .filter(u -> role == null || role.isBlank() || role.equalsIgnoreCase(u.getRole())
-                        || ("admin".equalsIgnoreCase(role) && "manager".equalsIgnoreCase(u.getRole())))
-                .filter(u -> status == null || status.isBlank() || ("active".equalsIgnoreCase(status) && u.isActive())
-                        || ("inactive".equalsIgnoreCase(status) && !u.isActive()))
-                .sorted(java.util.Comparator.comparing(User::getId).reversed()).toList();
         int safePage = Math.max(1, page);
         int size = Math.max(1, Math.min(per_page, 200));
-        long total = matched.size();
-        int from = Math.min((int) total, (safePage - 1) * size);
-        int to = Math.min((int) total, from + size);
-        List<Map<String, Object>> data = matched.subList(from, to).stream().map(this::view).toList();
-        return Map.of("total", total, "page", safePage, "per_page", size, "data", data);
+        String keyword = search == null ? null : search.trim().toLowerCase();
+        // 过滤、排序、分页与计数全部下推到数据库
+        org.springframework.data.jpa.domain.Specification<User> specification = (root, query, cb) -> {
+            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+            if (keyword != null && !keyword.isBlank()) {
+                String like = "%" + keyword + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("username")), like),
+                        cb.like(cb.lower(root.get("email")), like)));
+            }
+            if (role != null && !role.isBlank()) {
+                predicates.add("admin".equalsIgnoreCase(role)
+                        ? cb.equal(root.get("role"), "manager")
+                        : cb.equal(root.get("role"), role));
+            }
+            if (status != null && !status.isBlank()) {
+                if ("active".equalsIgnoreCase(status))
+                    predicates.add(cb.isTrue(root.get("active")));
+                else if ("inactive".equalsIgnoreCase(status))
+                    predicates.add(cb.isFalse(root.get("active")));
+            }
+            return predicates.isEmpty() ? cb.conjunction()
+                    : cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+        var pageResult = users.findAll(specification,
+                org.springframework.data.domain.PageRequest.of(safePage - 1, size,
+                        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id")));
+        List<Map<String, Object>> data = pageResult.getContent().stream().map(this::view).toList();
+        return Map.of("total", pageResult.getTotalElements(), "page", safePage, "per_page", size, "data", data);
     }
 
     /**
@@ -134,6 +147,9 @@ public class AdminUserController {
         if (user == null)
             return ResponseEntity.notFound().build();
         user.setActive(request.isActive());
+        // 停用账号时立即撤销所有会话；重新启用不会恢复旧会话，需重新登录
+        if (!request.isActive())
+            sessions.revokeByUserId(id);
         return ResponseEntity.ok(Map.of("success", true, "id", id, "is_active", request.isActive()));
     }
 

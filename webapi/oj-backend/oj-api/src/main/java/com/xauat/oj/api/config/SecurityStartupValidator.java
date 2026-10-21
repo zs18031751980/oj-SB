@@ -25,6 +25,7 @@ public class SecurityStartupValidator {
     private final String metricsToken;
     private final boolean localJudgeEnabled;
     private final boolean metricsAllowAnonymous;
+    private final boolean cookieSecure;
 
     public SecurityStartupValidator(
             @Value("${oj.environment:development}") String environment,
@@ -32,13 +33,15 @@ public class SecurityStartupValidator {
             @Value("${oj.auth.jwt-secret:}") String jwtSecret,
             @Value("${oj.metrics.token:}") String metricsToken,
             @Value("${oj.judge.local-enabled:false}") boolean localJudgeEnabled,
-            @Value("${oj.metrics.allow-anonymous:false}") boolean metricsAllowAnonymous) {
+            @Value("${oj.metrics.allow-anonymous:false}") boolean metricsAllowAnonymous,
+            @Value("${oj.auth.cookie-secure:false}") boolean cookieSecure) {
         this.environment = environment;
         this.executor = executor;
         this.jwtSecret = jwtSecret;
         this.metricsToken = metricsToken;
         this.localJudgeEnabled = localJudgeEnabled;
         this.metricsAllowAnonymous = metricsAllowAnonymous;
+        this.cookieSecure = cookieSecure;
     }
 
     @PostConstruct
@@ -66,5 +69,8 @@ public class SecurityStartupValidator {
             throw new IllegalStateException("生产环境禁止使用 local 执行器（OJ_ALLOW_LOCAL_JUDGE/OJ_JUDGE_EXECUTOR）");
         if ((metricsToken == null || metricsToken.isBlank()) && !metricsAllowAnonymous)
             throw new IllegalStateException("生产环境必须配置 METRICS_TOKEN（或显式 OJ_METRICS_ALLOW_ANONYMOUS=true）");
+        // 长期有效的刷新 Cookie 在 HTTPS 环境必须带 Secure
+        if (!cookieSecure)
+            throw new IllegalStateException("生产环境必须设置 OJ_COOKIE_SECURE=true");
     }
 }

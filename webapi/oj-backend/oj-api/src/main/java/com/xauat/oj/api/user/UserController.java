@@ -81,9 +81,14 @@ public class UserController {
     @PatchMapping
     public ResponseEntity<?> update(@RequestHeader(value = "Authorization", required = false)
     String authorization,
-            @RequestBody
+            @Valid @RequestBody
             ProfileRequest request) {
         User user = currentUser.require(authorization);
+        // 主题偏好白名单校验，避免只靠长度限制写入任意值
+        String theme = request.themePreference();
+        if (theme != null && !theme.isBlank()
+                && !Set.of("light", "dark", "system").contains(theme.trim().toLowerCase(java.util.Locale.ROOT)))
+            return ResponseEntity.badRequest().body(Map.of("error", "主题偏好无效"));
         if (request.email() != null && !request.email().isBlank()) {
             String email = request.email().trim();
             // 邮箱唯一性校验：排除自身后再判断是否被占用。

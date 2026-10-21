@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.Set;
 
 /**
@@ -38,11 +37,13 @@ public class AuthController {
     private final OAuthProviderRegistry providers;
     private final CurrentUser currentUser;
     private final AccountRateLimiter rateLimiter;
+    private final OAuthController oauth;
 
     /** 注入用户、密码编码器、JWT、会话、OAuth 供应商与账号维度限流器等依赖。 */
     public AuthController(UserRepository users, PasswordEncoder passwordEncoder, JwtService jwtService,
             AuthSessionRepository sessions, AuthSessionService sessionService,
-            OAuthProviderRegistry providers, CurrentUser currentUser, AccountRateLimiter rateLimiter) {
+            OAuthProviderRegistry providers, CurrentUser currentUser, AccountRateLimiter rateLimiter,
+            OAuthController oauth) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -51,6 +52,7 @@ public class AuthController {
         this.providers = providers;
         this.currentUser = currentUser;
         this.rateLimiter = rateLimiter;
+        this.oauth = oauth;
     }
 
     /**
@@ -103,11 +105,24 @@ public class AuthController {
             return ResponseEntity.badRequest()
                     .body(Map.of("success", false, "error", "不支持的登录方式：" + request.provider()));
         }
-        String authorizationUrl = providers.authorizationUrl(request.provider(), request.redirectUri(),
-                UUID.randomUUID().toString());
-        if (authorizationUrl == null)
-            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", "创建授权地址失败"));
-        return ResponseEntity.ok(Map.of("success", true, "authorization_url", authorizationUrl));
+        // 回调地址必须与供应商登记值一致，禁止把授权码导向任意地址
+        String configuredRedirect = providers.property(request.provider(), "redirect-uri");
+        String requestedRedirect = request.redirectUri();
+        if (requestedRedirect != null && !requestedRedirect.isBlank()
+                && !requestedRedirect.equals(configuredRedirect)) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "redirect_uri 不在白名单"));
+        }
+        try {
+            // 复用与 GET /auth/login/{provider} 相同的 state/PKCE 登记流程
+            String authorizationUrl = oauth.beginAuthorization(request.provider(), "/", configuredRedirect);
+            if (authorizationUrl == null)
+                return ResponseEntity.internalServerError()
+                        .body(Map.of("success", false, "error", "创建授权地址失败"));
+            return ResponseEntity.ok(Map.of("success", true, "authorization_url", authorizationUrl));
+        } catch (Exception exception) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("success", false, "error", "创建授权地址失败"));
+        }
     }
 
     /**

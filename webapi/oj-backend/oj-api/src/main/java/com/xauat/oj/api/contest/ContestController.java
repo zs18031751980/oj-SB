@@ -57,6 +57,7 @@ public class ContestController {
     private final EntryResolver entryResolver;
     private final com.xauat.oj.api.submission.SubmissionCache submissionCache;
     private final ContestTeamMemberRepository teamMembers;
+    private final ContestPermissionService permission;
 
     public ContestController(CurrentUser currentUser, ContestRepository contests,
             ContestParticipantRepository participants, ContestProblemRepository problems,
@@ -64,7 +65,7 @@ public class ContestController {
             ContestTestcaseRepository testcases, ContestScoreboardService scoreboard,
             JudgementRepository judgements, ContestEventRepository events, PackageService packageService,
             EntryResolver entryResolver, com.xauat.oj.api.submission.SubmissionCache submissionCache,
-            ContestTeamMemberRepository teamMembers) {
+            ContestTeamMemberRepository teamMembers, ContestPermissionService permission) {
         this.currentUser = currentUser;
         this.contests = contests;
         this.participants = participants;
@@ -80,6 +81,7 @@ public class ContestController {
         this.entryResolver = entryResolver;
         this.submissionCache = submissionCache;
         this.teamMembers = teamMembers;
+        this.permission = permission;
     }
 
     /**
@@ -92,8 +94,8 @@ public class ContestController {
     public List<Map<String, Object>> list(@RequestParam(required = false)
     String status) {
         return contests.findAll().stream()
-                // 隐藏草稿与已取消比赛，仅暴露公开可见项
-                .filter(c -> c.isPublic() && !"DRAFT".equals(c.getLifecycleState())
+                // 隐藏草稿/就绪/已取消比赛，仅暴露公开可见项
+                .filter(c -> c.isPublic() && !HIDDEN_STATES.contains(c.getLifecycleState())
                         && !"CANCELLED".equals(c.getLifecycleState()))
                 .filter(c -> status == null || status.isBlank() || status.equalsIgnoreCase(statusOf(c)))
                 .sorted(java.util.Comparator
@@ -143,11 +145,9 @@ public class ContestController {
             @PathVariable
             Integer id) {
         var contest = contests.findById(id).orElse(null);
-        if (contest == null)
+        // 统一可见性：草稿/就绪/已取消、私有比赛对无权限者伪装为不存在
+        if (!canViewContest(contest, authorization))
             return ResponseEntity.notFound().build();
-        if ((!contest.isPublic() || "DRAFT".equals(contest.getLifecycleState())) && !isManager(authorization)) {
-            return ResponseEntity.notFound().build();
-        }
         return ResponseEntity.ok(view(contest));
     }
 
@@ -355,9 +355,13 @@ public class ContestController {
      * @return 题面列表或 404
      */
     @GetMapping("/{id}/problems")
-    public ResponseEntity<?> problemList(@PathVariable
-    Integer id) {
-        if (!contests.existsById(id))
+    public ResponseEntity<?> problemList(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id) {
+        var contest = contests.findById(id).orElse(null);
+        // 与比赛详情复用同一套可见性判断，避免通过题面接口绕过草稿/私有比赛限制
+        if (!canViewContest(contest, authorization))
             return ResponseEntity.notFound().build();
         return ResponseEntity
                 .ok(problems.findByContest_IdOrderBySortOrderAscIdAsc(id).stream().map(this::publicProblem).toList());
@@ -371,9 +375,14 @@ public class ContestController {
      * @return 题面或 404
      */
     @GetMapping("/{id}/problems/{problemId}")
-    public ResponseEntity<?> problem(@PathVariable
-    Integer id, @PathVariable
-    Integer problemId) {
+    public ResponseEntity<?> problem(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer id, @PathVariable
+            Integer problemId) {
+        var contest = contests.findById(id).orElse(null);
+        if (!canViewContest(contest, authorization))
+            return ResponseEntity.notFound().build();
         return problems.findByIdAndContest_Id(problemId, id)
                 .<ResponseEntity<?>>map(item -> ResponseEntity.ok(publicProblem(item)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -386,10 +395,41 @@ public class ContestController {
      * @return 题面或 404
      */
     @GetMapping("/problems/{problemId}")
-    public ResponseEntity<?> problemGlobal(@PathVariable
-    Integer problemId) {
-        return problems.findById(problemId).<ResponseEntity<?>>map(p -> ResponseEntity.ok(publicProblem(p)))
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<?> problemGlobal(@RequestHeader(value = "Authorization", required = false)
+    String authorization,
+            @PathVariable
+            Integer problemId) {
+        var problem = problems.findById(problemId).orElse(null);
+        if (problem == null)
+            return ResponseEntity.notFound().build();
+        // 全局按题目 ID 访问时，必须回溯所属比赛并执行相同的可见性校验
+        var contest = contests.findById(problem.getContestId()).orElse(null);
+        if (!canViewContest(contest, authorization))
+            return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(publicProblem(problem));
+    }
+
+    /**
+     * 比赛可见性统一判定。
+     *
+     * <p>manager/staff 及比赛内 jury 可读全部状态；草稿、就绪、已取消对其他用户不可见；
+     * 私有比赛仅参赛者可读；公开且已发布的比赛允许匿名读取题面。</p>
+     *
+     * @param contest       比赛实体，可为 {@code null}
+     * @param authorization 认证头（可空）
+     * @return 是否允许读取
+     */
+    private boolean canViewContest(Contest contest, String authorization) {
+        if (contest == null)
+            return false;
+        var user = currentUser.optional(authorization);
+        boolean privileged = user != null
+                && ("manager".equals(user.getRole()) || "staff".equals(user.getRole()));
+        boolean jury = user != null && permission.allowed(contest.getId(), user, "jury");
+        boolean participant = user != null
+                && participants.findByContest_IdAndUser_Id(contest.getId(), user.getId()).isPresent();
+        return ContestVisibility.canView(contest.getLifecycleState(), contest.isPublic(), privileged, jury,
+                participant);
     }
 
     /** 参赛者题面：不返回参考答案、校验信息与题包摘要。 */

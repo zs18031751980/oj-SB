@@ -13,7 +13,7 @@ class SecurityStartupValidatorTest {
 
     private SecurityStartupValidator validator(String env, String executor, String jwt, String metrics,
             boolean local, boolean allowAnonymous) {
-        return new SecurityStartupValidator(env, executor, jwt, metrics, local, allowAnonymous);
+        return new SecurityStartupValidator(env, executor, jwt, metrics, local, allowAnonymous, true);
     }
 
     @Test
@@ -56,5 +56,11 @@ class SecurityStartupValidatorTest {
                 () -> validator("production", "judge0", GOOD_SECRET, "", false, false).validate());
         assertDoesNotThrow(
                 () -> validator("production", "judge0", GOOD_SECRET, "", false, true).validate());
+    }
+
+    @Test
+    void productionRequiresSecureCookie() {
+        assertThrows(IllegalStateException.class, () -> new SecurityStartupValidator("production", "judge0",
+                GOOD_SECRET, GOOD_METRICS, false, false, false).validate());
     }
 }
