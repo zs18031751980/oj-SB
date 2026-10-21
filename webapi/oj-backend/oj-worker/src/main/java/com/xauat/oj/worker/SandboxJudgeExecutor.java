@@ -34,6 +34,7 @@ import java.util.*;
 @Component
 @ConditionalOnExpression("'${oj.judge.executor:judge0}' == 'sandbox' and ${oj.judge.enabled:false}")
 public class SandboxJudgeExecutor implements JudgeExecutor {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SandboxJudgeExecutor.class);
     private final SubmissionRepository submissions;
     private final ContestSubmissionRepository contestSubmissions;
     private final TestcaseRepository testcases;
@@ -146,8 +147,13 @@ public class SandboxJudgeExecutor implements JudgeExecutor {
                 else { if (firstFailure == null) firstFailure = status; if (!oi) { verdict = status; break; } }
             }
             java.time.LocalDateTime executionEnd = java.time.LocalDateTime.now();
-            if (cases.isEmpty()) verdict = JudgeVerdict.ACCEPTED;
-            else if (firstFailure != null) verdict = oi ? (passed > 0 ? JudgeVerdict.PARTIAL : firstFailure) : firstFailure;
+            if (cases.isEmpty()) {
+                // 没有测试用例属于题目配置错误，不能默认通过
+                log.warn("比赛提交 {} 没有测试用例，判定为 SystemError", submission.getId());
+                verdict = JudgeVerdict.SYSTEM_ERROR;
+            } else if (firstFailure != null) {
+                verdict = oi ? (passed > 0 ? JudgeVerdict.PARTIAL : firstFailure) : firstFailure;
+            }
             int total = cases.isEmpty() ? 1 : cases.size();
             int updated = updateContestResult(submission, problem, contest, verdict, time, memory, passed, total, json(outcomes));
             if (updated == 1) contestSubmissions.updateMetricsIfCurrentAttempt(submission.getId(), submission.getAttemptId(),

@@ -19,18 +19,29 @@ class ClientIpResolverTest {
 
     @Test
     void ignoresForwardedHeaderWhenUntrusted() {
-        assertEquals("10.0.0.9", new ClientIpResolver(false).resolve(request()));
+        assertEquals("10.0.0.9", new ClientIpResolver(false, "").resolve(request()));
     }
 
     @Test
     void usesFirstForwardedAddressWhenTrusted() {
-        assertEquals("203.0.113.7", new ClientIpResolver(true).resolve(request()));
+        assertEquals("203.0.113.7", new ClientIpResolver(true, "").resolve(request()));
+    }
+
+    @Test
+    void ignoresForwardedHeaderFromNonTrustedPeer() {
+        // 直连对端不在可信代理列表中时，即使开启信任也不采纳转发头
+        assertEquals("10.0.0.9", new ClientIpResolver(true, "192.0.2.1").resolve(request()));
+    }
+
+    @Test
+    void acceptsForwardedHeaderFromConfiguredProxy() {
+        assertEquals("203.0.113.7", new ClientIpResolver(true, "10.0.0.9,192.0.2.1").resolve(request()));
     }
 
     @Test
     void fallsBackToRemoteAddrWithoutHeader() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr("192.0.2.5");
-        assertEquals("192.0.2.5", new ClientIpResolver(true).resolve(request));
+        assertEquals("192.0.2.5", new ClientIpResolver(true, "").resolve(request));
     }
 }

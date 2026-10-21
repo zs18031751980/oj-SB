@@ -35,6 +35,8 @@ services:
         SERVICE: oj-api
     environment:
       APP_ENV: production
+      # 容器内监听所有地址，外部访问由端口映射（仅回环）与反向代理控制
+      OJ_BIND_ADDRESS: "0.0.0.0"
       OJ_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oj}
       OJ_DB_USERNAME: ${POSTGRES_USER:-oj}
       OJ_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -44,6 +46,7 @@ services:
       OJ_COOKIE_SECURE: "true"
       OJ_REQUIRE_WORKER: "true"
       METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN is required}
+      OJ_TRUSTED_PROXIES: ${OJ_TRUSTED_PROXIES:-}
       # 生产禁止本机无沙箱执行，统一走 Judge0
       OJ_ALLOW_LOCAL_JUDGE: "false"
       OJ_JUDGE_ENABLED: "true"

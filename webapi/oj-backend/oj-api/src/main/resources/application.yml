@@ -25,6 +25,8 @@ spring:
       password: ${OJ_REDIS_PASSWORD:}
 server:
   port: ${OJ_API_PORT:6173}
+  # 绑定地址：本地开发默认回环；容器内显式设为 0.0.0.0（由端口映射限制外部访问）
+  address: ${OJ_BIND_ADDRESS:0.0.0.0}
   forward-headers-strategy: framework
 oj:
   environment: ${APP_ENV:development}
@@ -33,6 +35,8 @@ oj:
   proxy:
     # 仅当部署在会覆盖 X-Forwarded-For 的可信反向代理之后才可开启
     trust-forwarded-for: ${OJ_TRUST_FORWARDED_FOR:false}
+    # 可信代理地址列表（逗号分隔）；配置后仅当直连对端在列表内才采纳转发头
+    trusted-proxies: ${OJ_TRUSTED_PROXIES:}
   metrics:
     token: ${METRICS_TOKEN:}
     # 未配置令牌时是否允许匿名访问监控端点；生产必须为 false
@@ -44,6 +48,8 @@ oj:
     per-minute: ${OJ_RATE_LIMIT_PER_MINUTE:60}
     window-seconds: ${OJ_RATE_LIMIT_WINDOW_SECONDS:60}
     login-account-per-minute: ${OJ_RATE_LIMIT_LOGIN_ACCOUNT_PER_MINUTE:20}
+    # 匿名高成本执行接口在限流组件故障时是否拒绝（默认拒绝更安全）
+    public-fail-closed: ${OJ_RATE_LIMIT_PUBLIC_FAIL_CLOSED:true}
   oauth:
     pkce: ${OJ_OAUTH_PKCE:false}
     # 第三方 OAuth2 密码模式兼容开关；如无必要建议关闭，仅使用授权码流程
@@ -68,6 +74,7 @@ oj:
     frontend-url: ${OJ_FRONTEND_URL:http://localhost:5173}
   judge:
     local-enabled: ${OJ_ALLOW_LOCAL_JUDGE:false}
+    executor: ${OJ_JUDGE_EXECUTOR:judge0}
   judge0:
     url: ${OJ_JUDGE0_URL:http://localhost:2358}
     enabled: ${OJ_JUDGE0_ENABLED:false}

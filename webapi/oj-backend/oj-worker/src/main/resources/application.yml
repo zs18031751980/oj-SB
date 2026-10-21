@@ -19,6 +19,7 @@ oj:
   judge:
     enabled: ${OJ_JUDGE_ENABLED:false}
     executor: ${OJ_JUDGE_EXECUTOR:judge0}
+    local-enabled: ${OJ_ALLOW_LOCAL_JUDGE:false}
     url: ${OJ_JUDGE0_URL:http://localhost:2358}
     language-ids: ${OJ_JUDGE_LANGUAGE_IDS:cpp=54,python=71,java=62,go=60,javascript=63}
     sandbox:

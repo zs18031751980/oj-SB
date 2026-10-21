@@ -52,6 +52,12 @@ public class SecurityStartupValidator {
         if (DEFAULT_METRICS_TOKEN.equals(metricsToken))
             throw new IllegalStateException("METRICS_TOKEN 使用了占位值，请更换为随机令牌");
 
+        // 统一执行器配置：避免“允许本机执行但执行器仍为 judge0”等不一致组合
+        if (localJudgeEnabled && !"local".equalsIgnoreCase(executor))
+            throw new IllegalStateException("配置不一致：OJ_ALLOW_LOCAL_JUDGE=true 但 OJ_JUDGE_EXECUTOR 不是 local");
+        if ("local".equalsIgnoreCase(executor) && !localJudgeEnabled)
+            throw new IllegalStateException("配置不一致：OJ_JUDGE_EXECUTOR=local 但未开启 OJ_ALLOW_LOCAL_JUDGE");
+
         if (!production)
             return;
 

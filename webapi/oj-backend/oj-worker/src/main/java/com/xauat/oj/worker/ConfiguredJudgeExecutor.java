@@ -32,6 +32,7 @@ import java.util.Map;
 @Component
 @ConditionalOnExpression("('${oj.judge.executor:judge0}' == 'judge0' or '${oj.judge.executor:judge0}' == 'local') and ${oj.judge.enabled:false}")
 public class ConfiguredJudgeExecutor implements JudgeExecutor {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ConfiguredJudgeExecutor.class);
     private final SubmissionRepository submissions;
     private final ContestSubmissionRepository contestSubmissions;
     private final TestcaseRepository testcases;
@@ -91,7 +92,11 @@ public class ConfiguredJudgeExecutor implements JudgeExecutor {
             if (ok) passed++;
             else { failIndex = i; verdict = status; break; }
         }
-        if (cases.isEmpty()) verdict = JudgeVerdict.ACCEPTED;
+        // 没有测试用例属于题目配置错误，绝不能默认判为通过
+        if (cases.isEmpty()) {
+            log.warn("提交 {} 没有测试用例，判定为 SystemError", submission.getId());
+            verdict = JudgeVerdict.SYSTEM_ERROR;
+        }
         submission.recordResult(verdict, totalTime, maxMemory, json(outcomes), failIndex);
         submissions.save(submission);
         if (submission.getCreatedAt() != null) {
@@ -138,7 +143,11 @@ public class ConfiguredJudgeExecutor implements JudgeExecutor {
                 if (!oi) { verdict = status; break; }
             }
         }
-        if (cases.isEmpty()) verdict = JudgeVerdict.ACCEPTED;
+        // 没有测试用例属于题目配置错误，绝不能默认判为通过
+        if (cases.isEmpty()) {
+            log.warn("提交 {} 没有测试用例，判定为 SystemError", submission.getId());
+            verdict = JudgeVerdict.SYSTEM_ERROR;
+        }
         else if (!JudgeVerdict.ACCEPTED.equals(firstFailure)) verdict = oi ? (passed > 0 ? JudgeVerdict.PARTIAL : firstFailure) : firstFailure;
         int total = cases.isEmpty() ? 1 : cases.size();
         int updated = contestSubmissions.updateResultIfCurrentAttempt(submission.getId(), submission.getAttemptId(),

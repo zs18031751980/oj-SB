@@ -140,7 +140,15 @@ load_config() {
   fi
   : "${OJ_JUDGE0_URL:=http://127.0.0.1:2358}"
   : "${OJ_TRUST_FORWARDED_FOR:=false}"
+  : "${OJ_TRUSTED_PROXIES:=}"
   : "${OJ_METRICS_ALLOW_ANONYMOUS:=false}"
+  : "${OJ_RATE_LIMIT_PUBLIC_FAIL_CLOSED:=true}"
+  : "${OJ_OAUTH_PASSWORD_GRANT_ENABLED:=true}"
+  # 本地默认只监听回环地址，避免开发机上的 API 被外部直接访问
+  : "${OJ_BIND_ADDRESS:=127.0.0.1}"
+  # 测试账号默认不创建；仅在开发环境显式开启，且默认最小角色
+  : "${OJ_SEED_DEV_ACCOUNT:=false}"
+  : "${OJ_SEED_DEV_ROLE:=member}"
   : "${OJ_LEARN_ROOT:=$FRONTEND/learn_source}"
   : "${OJ_JWT_SECRET:=0123456789abcdef0123456789abcdef0123456789abcdef}"
 
@@ -180,8 +188,9 @@ load_config() {
 
   export APP_ENV OJ_DB_URL OJ_DB_USERNAME OJ_DB_PASSWORD OJ_REDIS_HOST OJ_REDIS_PORT OJ_REDIS_PASSWORD \
          OJ_API_PORT OJ_FRONTEND_URL OJ_COOKIE_SECURE OJ_ALLOW_LOCAL_JUDGE OJ_JUDGE_ENABLED \
-         OJ_JUDGE_EXECUTOR OJ_JUDGE0_ENABLED OJ_JUDGE0_URL OJ_TRUST_FORWARDED_FOR \
-         OJ_METRICS_ALLOW_ANONYMOUS OJ_LEARN_ROOT OJ_JWT_SECRET OJ_OAUTH_PROVIDERS
+         OJ_JUDGE_EXECUTOR OJ_JUDGE0_ENABLED OJ_JUDGE0_URL OJ_TRUST_FORWARDED_FOR OJ_TRUSTED_PROXIES \
+         OJ_METRICS_ALLOW_ANONYMOUS OJ_RATE_LIMIT_PUBLIC_FAIL_CLOSED OJ_OAUTH_PASSWORD_GRANT_ENABLED \
+         OJ_BIND_ADDRESS OJ_LEARN_ROOT OJ_JWT_SECRET OJ_OAUTH_PROVIDERS
   export OJ_OAUTH_IOSCLUB_CLIENT_ID OJ_OAUTH_IOSCLUB_CLIENT_SECRET OJ_OAUTH_IOSCLUB_ISSUER \
          OJ_OAUTH_IOSCLUB_SCOPE OJ_OAUTH_IOSCLUB_REDIRECT_URI
   export OJ_OAUTH_GITHUB_CLIENT_ID OJ_OAUTH_GITHUB_CLIENT_SECRET OJ_OAUTH_GITHUB_AUTHORIZATION_URI \
@@ -205,10 +214,19 @@ start_pg() {
     echo "[pg] 启动 127.0.0.1:$PG_PORT"
   fi
   sleep 1
-  "$PSQL" -h 127.0.0.1 -p "$PG_PORT" -U postgres -tAc "select 1 from pg_roles where rolname='$DB_USER'" | grep -q 1 \
-    || "$PSQL" -h 127.0.0.1 -p "$PG_PORT" -U postgres -c "create role $DB_USER login password '$DB_PASS' superuser;" >/dev/null
+  # 应用账号使用最小权限：无 SUPERUSER/CREATEDB/CREATEROLE；库所有者仅用于 Flyway 建表
+  [[ "$DB_USER" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "DB_USER 名称非法: $DB_USER"
+  local pw="${OJ_DB_PASSWORD//\'/\'\'}"
+  if ! "$PSQL" -h 127.0.0.1 -p "$PG_PORT" -U postgres -tAc "select 1 from pg_roles where rolname='$DB_USER'" | grep -q 1; then
+    "$PSQL" -h 127.0.0.1 -p "$PG_PORT" -U postgres \
+      -c "create role \"$DB_USER\" login password '$pw' nosuperuser nocreatedb nocreaterole;" >/dev/null
+  else
+    # 已存在时同步密码并移除超级用户等过高权限，保证与应用连接密码一致
+    "$PSQL" -h 127.0.0.1 -p "$PG_PORT" -U postgres \
+      -c "alter role \"$DB_USER\" with login password '$pw' nosuperuser nocreatedb nocreaterole;" >/dev/null
+  fi
   "$PSQL" -h 127.0.0.1 -p "$PG_PORT" -U postgres -tAc "select 1 from pg_database where datname='$DB_NAME'" | grep -q 1 \
-    || "$PSQL" -h 127.0.0.1 -p "$PG_PORT" -U postgres -c "create database $DB_NAME owner $DB_USER;" >/dev/null
+    || "$PSQL" -h 127.0.0.1 -p "$PG_PORT" -U postgres -c "create database \"$DB_NAME\" owner \"$DB_USER\";" >/dev/null
   PG_CTL_BIN="$PG_CTL"; PSQL_BIN="$PSQL"
 }
 
@@ -252,12 +270,20 @@ start_api() {
 }
 
 seed_default_user() {
-  # 首次运行创建本地测试账号 smoke / SmokePass123!（BCrypt）
+  # 安全默认：绝不在生产环境自动创建账号；测试账号仅在开发环境显式开启时创建
+  if [ "${APP_ENV}" = "production" ] || [ "${OJ_SEED_DEV_ACCOUNT}" != "true" ]; then
+    return
+  fi
+  case "${OJ_SEED_DEV_ROLE}" in
+    member|staff|manager) ;;
+    *) echo "[seed] OJ_SEED_DEV_ROLE 非法，跳过测试账号创建" >&2; return ;;
+  esac
+  # 开发测试账号 smoke / SmokePass123!（BCrypt）；默认最小角色 member
   local hash='$2a$10$xlJrcAjC664UPvEsAUFdpOerlPmJxNJChZSpvZCwNrP62GqIMWJk2'
   if ! "$PSQL_BIN" -h 127.0.0.1 -p "$PG_PORT" -U "$DB_USER" -d "$DB_NAME" -tAc "select 1 from users limit 1" 2>/dev/null | grep -q 1; then
     "$PSQL_BIN" -h 127.0.0.1 -p "$PG_PORT" -U "$DB_USER" -d "$DB_NAME" -c \
-      "insert into users (username,email,name,password_hash,is_active,role,theme_preference,created_at,updated_at) values ('smoke','smoke@example.com','Smoke','$hash',true,'manager','system',now(),now());" >/dev/null
-    echo "[seed] 已创建本地账号 smoke / SmokePass123!"
+      "insert into users (username,email,name,password_hash,is_active,role,theme_preference,created_at,updated_at) values ('smoke','smoke@example.com','Smoke','$hash',true,'${OJ_SEED_DEV_ROLE}','system',now(),now());" >/dev/null
+    echo "[seed] 已创建开发测试账号 smoke / SmokePass123!（角色=${OJ_SEED_DEV_ROLE}）"
   fi
 }
 
@@ -312,7 +338,9 @@ up() {
   else
     echo "判题：Judge0（$OJ_JUDGE0_URL）；如需本地无沙箱判题请显式设置 OJ_ALLOW_LOCAL_JUDGE=true"
   fi
-  echo "本地登录账号：smoke / SmokePass123!（在登录表单用「账号+密码」登录）"
+  if [ "${OJ_SEED_DEV_ACCOUNT}" = "true" ]; then
+    echo "开发测试账号：smoke / SmokePass123!（角色=${OJ_SEED_DEV_ROLE}）"
+  fi
   if [ -n "${OJ_OAUTH_IOSCLUB_CLIENT_ID:-}" ] || [ -n "${OJ_OAUTH_GITHUB_CLIENT_ID:-}" ]; then
     echo "提示：OAuth 回调默认指向 127.0.0.1，若未在提供方白名单登记，本地点击第三方登录会报「无效的回调地址」。"
   fi

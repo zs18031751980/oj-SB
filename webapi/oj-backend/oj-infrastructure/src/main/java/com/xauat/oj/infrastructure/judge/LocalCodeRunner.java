@@ -100,7 +100,15 @@ public class LocalCodeRunner {
             Thread outReader = drain(process.getInputStream(), stdout, 1024 * 1024);
             Thread errReader = drain(process.getErrorStream(), stderr, 1024 * 1024);
             boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            if (!finished) { process.destroyForcibly(); process.waitFor(2, TimeUnit.SECONDS); }
+            if (!finished) {
+                // 超时：先杀掉整个进程树，避免用户代码派生的子进程残留
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+                process.waitFor(2, TimeUnit.SECONDS);
+            } else {
+                // 正常结束后清理可能遗留的后台子进程
+                process.descendants().forEach(ProcessHandle::destroy);
+            }
             outReader.join(1000); errReader.join(1000);
             long elapsed = System.currentTimeMillis() - start;
             return new Proc(stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8),

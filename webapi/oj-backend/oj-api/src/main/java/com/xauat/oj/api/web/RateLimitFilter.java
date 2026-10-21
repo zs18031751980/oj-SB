@@ -18,6 +18,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final ClientIpResolver clientIp;
     private final int limit;
     private final int publicRunLimit;
+    private final boolean publicFailClosed;
     private final Duration window;
     /** @param limit 单窗口允许次数　@param windowSeconds 窗口秒数 */
     public RateLimitFilter(StringRedisTemplate redis, ClientIpResolver clientIp,
@@ -25,12 +26,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             int limit,
             @Value("${oj.rate-limit.code-public-per-minute:20}")
             int publicRunLimit,
+            @Value("${oj.rate-limit.public-fail-closed:true}")
+            boolean publicFailClosed,
             @Value("${oj.rate-limit.window-seconds:60}")
             long windowSeconds) {
         this.redis = redis;
         this.clientIp = clientIp;
         this.limit = limit;
         this.publicRunLimit = publicRunLimit;
+        this.publicFailClosed = publicFailClosed;
         this.window = Duration.ofSeconds(windowSeconds);
     }
     /**
@@ -66,7 +70,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 response.getWriter().write("{\"error\":\"请求过于频繁\"}");
                 return;
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException exception) {
+            // 限流组件故障时的降级：匿名高成本执行默认拒绝，避免失去保护后被刷爆
+            if (publicFailClosed && "/code/run/public".equals(path)) {
+                response.setStatus(503);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"error\":\"限流服务不可用，请稍后重试\"}");
+                return;
+            }
         }
         chain.doFilter(request, response);
     }

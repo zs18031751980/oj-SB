@@ -118,6 +118,7 @@ iOS Club 代码综合平台集**在线编程、代码评测、学习资源与公
 
 ```bash
 APP_ENV=production                  # development|production
+OJ_BIND_ADDRESS=127.0.0.1           # 本地回环；容器内设为 0.0.0.0
 
 # 数据存储
 OJ_DB_URL=jdbc:postgresql://127.0.0.1:5432/oj
@@ -172,12 +173,14 @@ OJ_ALLOW_LOCAL_JUDGE=true OJ_JUDGE_EXECUTOR=local ./start.sh up
 ## 生产部署与安全要求
 
 1. **所有密钥通过 Secret/环境变量注入**，禁止提交真实凭据；占位 JWT/指标令牌会在启动时被拒绝。
-2. **禁止本机执行**：`APP_ENV=production` 且 `OJ_ALLOW_LOCAL_JUDGE=true`（或执行器为 `local`）时 API/Worker 直接拒绝启动。
-3. **Judge0 端口不对外**：默认仅绑定 `127.0.0.1:2358`；Judge0 部署在专用执行节点，按版本要求尽量降低权限。
-4. **监控端点统一鉴权**：`/metrics`、`/actuator/metrics/**`、`/actuator/prometheus` 均需 `METRICS_TOKEN`；生产未配置令牌时启动失败（除非显式允许匿名）。
-5. **可信代理**：仅当反向代理会覆盖 `X-Forwarded-For` 时设置 `OJ_TRUST_FORWARDED_FOR=true`，否则限流使用真实远端地址。
-6. **路径安全**：学习资源 id 在规范化后必须位于资源根目录内，已对 `..`、绝对路径与编码斜杠做回归测试。
-7. **运维脚本**：`webapi/oj-backend/deploy/` 提供 `preflight.sh`、`smoke.sh`、`check_release.sh`、`promote_release.sh`、`set-role.sh`、`archive_wal.sh`、`audit_database.sh`、`recovery.sh`、`restored_smoke.sh`、`calibrate_judge.sh`，以及 `alerts.yaml`、`nginx.conf.example`、`postgresql-recovery.conf.example`。
+2. **禁止固定管理员账号**：启动时不会自动创建任何用户；首次管理员通过受控流程（SSO 供应商角色或运维操作）创建。`OJ_SEED_DEV_ACCOUNT` 仅在开发环境显式开启时生效，且默认最小角色 `member`。
+3. **数据库最小权限**：本地初始化创建的 `oj` 角色为 `NOSUPERUSER/NOCREATEDB/NOCREATEROLE`，并保证角色密码与 `OJ_DB_PASSWORD` 一致；生产应使用独立的迁移账号与运行账号。
+4. **禁止本机执行**：`APP_ENV=production` 且 `OJ_ALLOW_LOCAL_JUDGE=true`（或执行器为 `local`）时 API/Worker 直接拒绝启动。
+5. **Judge0 端口不对外**：默认仅绑定 `127.0.0.1:2358`；Judge0 部署在专用执行节点，按版本要求尽量降低权限。
+6. **监控端点统一鉴权**：`/metrics`、`/actuator/metrics/**`、`/actuator/prometheus` 均需 `METRICS_TOKEN`；生产未配置令牌时启动失败（除非显式允许匿名）。
+7. **可信代理**：仅当反向代理会覆盖 `X-Forwarded-For` 时设置 `OJ_TRUST_FORWARDED_FOR=true`，并用 `OJ_TRUSTED_PROXIES` 限定可信对端；匿名执行在限流组件故障时默认拒绝。
+8. **路径安全**：学习资源 id 在规范化后必须位于资源根目录内，已对 `..`、绝对路径与编码斜杠做回归测试。
+9. **运维脚本**：`webapi/oj-backend/deploy/` 提供 `preflight.sh`、`smoke.sh`、`check_release.sh`、`promote_release.sh`、`set-role.sh`、`archive_wal.sh`、`audit_database.sh`、`recovery.sh`、`restored_smoke.sh`、`calibrate_judge.sh`，以及 `alerts.yaml`、`nginx.conf.example`、`postgresql-recovery.conf.example`。
 
 ### 数据库与迁移
 
