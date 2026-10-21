@@ -1,5 +1,6 @@
 package com.xauat.oj.infrastructure.judge;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.*;
@@ -19,7 +20,21 @@ import java.util.concurrent.TimeUnit;
 public class LocalCodeRunner {
     public record Result(String stdout, String stderr, Integer exitCode, boolean timedOut, long timeMs, String message) {}
 
+    private final boolean enabled;
+
+    /**
+     * @param allowed   是否允许本机执行（对应 OJ_ALLOW_LOCAL_JUDGE）
+     * @param environment 运行环境；production 下无条件禁用
+     */
+    public LocalCodeRunner(@Value("${oj.judge.local-enabled:false}") boolean allowed,
+            @Value("${oj.environment:development}") String environment) {
+        this.enabled = allowed && !"production".equalsIgnoreCase(environment);
+    }
+
     public Result run(String code, String language, String stdin, int timeoutSeconds) {
+        // 双重防线：即使调用方误用，生产环境/未显式开启时也拒绝执行
+        if (!enabled)
+            return new Result("", "", null, false, 0, "本机代码执行已禁用");
         String lang = language == null ? "cpp" : language.toLowerCase(java.util.Locale.ROOT);
         Path work;
         try { work = Files.createTempDirectory("oj-local-"); }
@@ -67,7 +82,15 @@ public class LocalCodeRunner {
         long start = System.currentTimeMillis();
         try {
             ProcessBuilder builder = new ProcessBuilder(command).directory(work.toFile());
-            builder.environment().put("PYTHONDONTWRITEBYTECODE", "1");
+            // 不继承父进程环境，避免把 OJ_JWT_SECRET/METRICS_TOKEN 等敏感变量泄露给用户代码
+            var environment = builder.environment();
+            environment.clear();
+            environment.put("PATH", System.getenv().getOrDefault("PATH", "/usr/local/bin:/usr/bin:/bin"));
+            environment.put("LANG", "C.UTF-8");
+            environment.put("LC_ALL", "C.UTF-8");
+            environment.put("HOME", work.toString());
+            environment.put("TMPDIR", work.toString());
+            environment.put("PYTHONDONTWRITEBYTECODE", "1");
             Process process = builder.start();
             try (Writer writer = new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8)) {
                 writer.write(stdin);

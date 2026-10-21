@@ -67,14 +67,15 @@ public class SubmissionController {
             Integer page,
             @RequestParam(defaultValue = "20")
             Integer per_page) {
-        var all = submissions.findByUser_IdOrderByIdDesc(currentUser.require(authorization).getId());
-        long total = all.size();
-        // 内存分页并夹取到合理区间，per_page 上限 50。
+        var user = currentUser.require(authorization);
+        // 数据库分页（避免加载用户全部提交），per_page 上限 50，按 id 倒序。
         int safePage = Math.max(1, page);
         int size = Math.max(1, Math.min(per_page, 50));
-        int from = Math.min((int) total, (safePage - 1) * size);
-        int to = Math.min((int) total, from + size);
-        List<Map<String, Object>> data = all.subList(from, to).stream().map(this::historyItem).toList();
+        var pageResult = submissions.findByUser_Id(user.getId(),
+                org.springframework.data.domain.PageRequest.of(safePage - 1, size,
+                        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id")));
+        long total = pageResult.getTotalElements();
+        List<Map<String, Object>> data = pageResult.getContent().stream().map(this::historyItem).toList();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("total", total);
         body.put("page", safePage);

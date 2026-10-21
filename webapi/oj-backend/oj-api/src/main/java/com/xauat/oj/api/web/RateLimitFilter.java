@@ -15,15 +15,22 @@ import java.time.Duration;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
     private final StringRedisTemplate redis;
+    private final ClientIpResolver clientIp;
     private final int limit;
+    private final int publicRunLimit;
     private final Duration window;
     /** @param limit 单窗口允许次数　@param windowSeconds 窗口秒数 */
-    public RateLimitFilter(StringRedisTemplate redis, @Value("${oj.rate-limit.per-minute:60}")
-    int limit,
+    public RateLimitFilter(StringRedisTemplate redis, ClientIpResolver clientIp,
+            @Value("${oj.rate-limit.per-minute:60}")
+            int limit,
+            @Value("${oj.rate-limit.code-public-per-minute:20}")
+            int publicRunLimit,
             @Value("${oj.rate-limit.window-seconds:60}")
             long windowSeconds) {
         this.redis = redis;
+        this.clientIp = clientIp;
         this.limit = limit;
+        this.publicRunLimit = publicRunLimit;
         this.window = Duration.ofSeconds(windowSeconds);
     }
     /**
@@ -42,18 +49,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        // 反向代理下取 X-Forwarded-For 第一段作为真实客户端 IP，否则回退 RemoteAddr
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isBlank())
-            ip = request.getRemoteAddr();
-        else
-            ip = ip.split(",", 2)[0].trim();
-        String bucket = "oj:rate:" + ip + ":" + request.getRequestURI();
+        // 仅在可信代理后才读取 X-Forwarded-For，否则使用真实远端地址，避免伪造绕过
+        String ip = clientIp.resolve(request);
+        String path = request.getRequestURI();
+        // 匿名执行接口使用独立且更严格的额度
+        int effectiveLimit = "/code/run/public".equals(path) ? publicRunLimit : limit;
+        String bucket = "oj:rate:" + ip + ":" + path;
         try {
             Long count = redis.opsForValue().increment(bucket);
             if (count != null && count == 1L)
                 redis.expire(bucket, window);
-            if (count != null && count > limit) {
+            if (count != null && count > effectiveLimit) {
                 response.setStatus(429);
                 response.setHeader("Retry-After", String.valueOf(window.toSeconds()));
                 response.setContentType("application/json;charset=UTF-8");

@@ -1,14 +1,17 @@
+# 生产参考编排。所有凭据必须通过部署环境/Secret 注入，仓库不保存任何真实密钥。
+# 启动前请设置：POSTGRES_PASSWORD、OJ_JWT_SECRET、METRICS_TOKEN、
+#              JUDGE0_DB_PASSWORD、JUDGE0_SECRET_KEY_BASE（可选 JUDGE0_REDIS_PASSWORD）。
 services:
   postgres:
     image: postgres:17
     environment:
-      POSTGRES_USER: oj
-      POSTGRES_PASSWORD: oj
-      POSTGRES_DB: oj
+      POSTGRES_USER: ${POSTGRES_USER:-oj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-oj}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U oj"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oj}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -31,19 +34,27 @@ services:
       args:
         SERVICE: oj-api
     environment:
-      OJ_DB_URL: jdbc:postgresql://postgres:5432/oj
-      OJ_DB_USERNAME: oj
-      OJ_DB_PASSWORD: oj
+      APP_ENV: production
+      OJ_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oj}
+      OJ_DB_USERNAME: ${POSTGRES_USER:-oj}
+      OJ_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
-      OJ_JWT_SECRET: change-this-secret-in-production-change-this-secret-in-production
+      OJ_JWT_SECRET: ${OJ_JWT_SECRET:?OJ_JWT_SECRET is required}
       OJ_COOKIE_SECURE: "true"
       OJ_REQUIRE_WORKER: "true"
-      METRICS_TOKEN: change-me-metrics-token
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN is required}
+      # 生产禁止本机无沙箱执行，统一走 Judge0
+      OJ_ALLOW_LOCAL_JUDGE: "false"
+      OJ_JUDGE_ENABLED: "true"
+      OJ_JUDGE_EXECUTOR: judge0
       OJ_JUDGE0_URL: http://judge0-server:2358
       OJ_JUDGE0_ENABLED: "true"
+      # 仅当本服务位于会覆盖 X-Forwarded-For 的可信代理之后才设为 true
+      OJ_TRUST_FORWARDED_FOR: ${OJ_TRUST_FORWARDED_FOR:-false}
     ports:
-      - "6173:6173"
+      # 默认仅绑定回环地址，由反向代理对外提供服务
+      - "127.0.0.1:6173:6173"
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,12 +68,14 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     environment:
-      OJ_DB_URL: jdbc:postgresql://postgres:5432/oj
-      OJ_DB_USERNAME: oj
-      OJ_DB_PASSWORD: oj
+      APP_ENV: production
+      OJ_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oj}
+      OJ_DB_USERNAME: ${POSTGRES_USER:-oj}
+      OJ_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       OJ_REDIS_HOST: redis
       OJ_REDIS_PORT: 6379
-      OJ_JWT_SECRET: change-this-secret-in-production-change-this-secret-in-production
+      OJ_JWT_SECRET: ${OJ_JWT_SECRET:?OJ_JWT_SECRET is required}
+      OJ_ALLOW_LOCAL_JUDGE: "false"
       OJ_JUDGE_ENABLED: "true"
       OJ_JUDGE_EXECUTOR: judge0
       OJ_JUDGE0_URL: http://judge0-server:2358
@@ -74,13 +87,19 @@ services:
       judge0-server:
         condition: service_started
 
-  # ---- Judge0 CE（自托管，开源免费）----
+  # ---- Judge0 CE（自托管）----
+  # 说明：Judge0 依赖 privileged 完成隔离（cgroup/namespace），不应与业务数据库混布，
+  #       建议部署在专用执行节点并限制网络访问。2358 端口仅绑定回环地址供本机调试。
   judge0-server:
     image: judge0/judge0:1.13.1
     volumes:
       - ./judge0.conf:/judge0.conf:ro
+    environment:
+      POSTGRES_PASSWORD: ${JUDGE0_DB_PASSWORD:?JUDGE0_DB_PASSWORD is required}
+      SECRET_KEY_BASE: ${JUDGE0_SECRET_KEY_BASE:?JUDGE0_SECRET_KEY_BASE is required}
+      REDIS_PASSWORD: ${JUDGE0_REDIS_PASSWORD:-}
     ports:
-      - "2358:2358"
+      - "127.0.0.1:2358:2358"
     privileged: true
     restart: always
     depends_on:
@@ -94,6 +113,10 @@ services:
     command: ["./scripts/workers"]
     volumes:
       - ./judge0.conf:/judge0.conf:ro
+    environment:
+      POSTGRES_PASSWORD: ${JUDGE0_DB_PASSWORD:?JUDGE0_DB_PASSWORD is required}
+      SECRET_KEY_BASE: ${JUDGE0_SECRET_KEY_BASE:?JUDGE0_SECRET_KEY_BASE is required}
+      REDIS_PASSWORD: ${JUDGE0_REDIS_PASSWORD:-}
     privileged: true
     restart: always
     depends_on:
@@ -107,13 +130,23 @@ services:
     environment:
       POSTGRES_DB: judge0
       POSTGRES_USER: judge0
-      POSTGRES_PASSWORD: judge0_secret_change_me
+      POSTGRES_PASSWORD: ${JUDGE0_DB_PASSWORD:?JUDGE0_DB_PASSWORD is required}
     volumes:
       - judge0db:/var/lib/postgresql/data
 
   judge0-redis:
     image: redis:7.2.4
-    command: ["redis-server", "--appendonly", "yes"]
+    command:
+      - sh
+      - -c
+      - >
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+        else
+          exec redis-server --appendonly yes;
+        fi
+    environment:
+      REDIS_PASSWORD: ${JUDGE0_REDIS_PASSWORD:-}
     volumes:
       - judge0redis:/data
 

@@ -1,6 +1,7 @@
 package com.xauat.oj.api.judge;
 
 import com.xauat.oj.api.auth.CurrentUser;
+import com.xauat.oj.api.web.ClientIpResolver;
 import com.xauat.oj.infrastructure.judge.LocalCodeRunner;
 import com.xauat.oj.infrastructure.queue.JudgeQueue;
 import jakarta.validation.Valid;
@@ -26,23 +27,30 @@ public class CodeController {
     private final RestClient judge0;
     private final LocalCodeRunner localRunner;
     private final JudgeQueue queue;
+    private final ClientIpResolver clientIp;
     private final boolean enabled;
     private final boolean localEnabled;
+    private final boolean production;
 
     public CodeController(CurrentUser currentUser, RestClient.Builder builder, LocalCodeRunner localRunner,
-            JudgeQueue queue,
+            JudgeQueue queue, ClientIpResolver clientIp,
             @Value("${oj.judge0.url}")
             String url,
             @Value("${oj.judge0.enabled:false}")
             boolean enabled,
             @Value("${oj.judge.local-enabled:false}")
-            boolean localEnabled) {
+            boolean localEnabled,
+            @Value("${oj.environment:development}")
+            String environment) {
         this.currentUser = currentUser;
         this.judge0 = builder.baseUrl(url).build();
         this.localRunner = localRunner;
         this.queue = queue;
+        this.clientIp = clientIp;
         this.enabled = enabled;
         this.localEnabled = localEnabled;
+        // 生产环境即使误配 OJ_ALLOW_LOCAL_JUDGE 也绝不回退到本机执行
+        this.production = "production".equalsIgnoreCase(environment);
     }
 
     /**
@@ -72,15 +80,7 @@ public class CodeController {
     public ResponseEntity<?> publicRun(@Valid @RequestBody
     RunRequest request,
             HttpServletRequest http) {
-        return execute(request, "ip:" + clientIp(http));
-    }
-
-    /** 解析客户端来源 IP：优先代理透传的 X-Forwarded-For 首个地址，其次 socket 地址。 */
-    private String clientIp(HttpServletRequest http) {
-        String forwarded = http.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank())
-            return forwarded.split(",")[0].trim();
-        return http.getRemoteAddr() == null ? "unknown" : http.getRemoteAddr();
+        return execute(request, "ip:" + clientIp.resolve(http));
     }
 
     /**
@@ -117,14 +117,14 @@ public class CodeController {
      * @return 运行结果；均未启用或远程失败返回 503
      */
     private ResponseEntity<?> doExecute(RunRequest request) {
-        // 本地运行器仅在启用且 Judge0 关闭时作为兜底，超时固定 10 秒。
-        if (localEnabled && !enabled) {
+        // 本地运行器仅在非生产环境、显式启用且 Judge0 关闭时作为开发兜底，超时固定 10 秒。
+        if (!production && localEnabled && !enabled) {
             int timeout = 10;
             return ResponseEntity.ok(localRunner
                     .asResponse(localRunner.run(request.code(), request.language(), request.stdin(), timeout)));
         }
         if (!enabled)
-            return ResponseEntity.status(503).body(Map.of("error", "Judge0 服务未启用"));
+            return ResponseEntity.status(503).body(Map.of("error", "代码执行服务未启用（生产环境禁止本机执行）"));
         try {
             // wait=true 同步等待判题结果，简化前端调用。
             Map<String, Object> payload = Map.of("source_code", request.code(), "language_id",

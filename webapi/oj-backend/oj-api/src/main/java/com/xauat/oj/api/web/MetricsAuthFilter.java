@@ -9,13 +9,23 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.security.MessageDigest;
 
-/** 与旧后端一致：/metrics（Prometheus）需要 METRICS_TOKEN；未配置时开发环境放行。 */
+/**
+ * 监控端点鉴权：所有指标端点（/metrics、/actuator/metrics/**、/actuator/prometheus）
+ * 统一要求 {@code Authorization: Bearer <METRICS_TOKEN>}。
+ *
+ * <p>未配置令牌时默认拒绝（503），仅在显式允许匿名的开发环境放行，避免监控信息意外公开。</p>
+ */
 public class MetricsAuthFilter extends OncePerRequestFilter {
     private final String token;
+    private final boolean allowAnonymous;
 
-    /** @param token 期望的指标访问令牌，空字符串表示不启用认证（开发环境）。 */
-    public MetricsAuthFilter(String token) {
+    /**
+     * @param token          期望的指标访问令牌
+     * @param allowAnonymous 未配置令牌时是否允许匿名访问（仅开发环境可开启）
+     */
+    public MetricsAuthFilter(String token, boolean allowAnonymous) {
         this.token = token == null ? "" : token.trim();
+        this.allowAnonymous = allowAnonymous;
     }
 
     /**
@@ -30,9 +40,15 @@ public class MetricsAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        // 未配置令牌视为开发环境，直接放行
+        // 未配置令牌：默认拒绝，避免指标端点匿名暴露；仅显式允许时放行
         if (token.isBlank()) {
-            chain.doFilter(request, response);
+            if (allowAnonymous) {
+                chain.doFilter(request, response);
+                return;
+            }
+            response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"error\":\"指标访问令牌未配置\"}");
             return;
         }
         String header = request.getHeader("Authorization");

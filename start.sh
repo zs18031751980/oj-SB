@@ -127,11 +127,27 @@ load_config() {
   : "${OJ_API_PORT:=$API_PORT}"
   : "${OJ_FRONTEND_URL:=http://127.0.0.1:${WEB_PORT}}"
   : "${OJ_COOKIE_SECURE:=false}"
-  : "${OJ_ALLOW_LOCAL_JUDGE:=true}"
+  : "${APP_ENV:=development}"
+  # 安全默认：不自动启用无沙箱的本机代码执行；本地开发需显式 OJ_ALLOW_LOCAL_JUDGE=true
+  : "${OJ_ALLOW_LOCAL_JUDGE:=false}"
   : "${OJ_JUDGE_ENABLED:=true}"
-  : "${OJ_JUDGE_EXECUTOR:=local}"
+  if [ "$OJ_ALLOW_LOCAL_JUDGE" = "true" ]; then
+    OJ_JUDGE_EXECUTOR="${OJ_JUDGE_EXECUTOR:-local}"
+    OJ_JUDGE0_ENABLED="${OJ_JUDGE0_ENABLED:-false}"
+  else
+    OJ_JUDGE_EXECUTOR="${OJ_JUDGE_EXECUTOR:-judge0}"
+    OJ_JUDGE0_ENABLED="${OJ_JUDGE0_ENABLED:-true}"
+  fi
+  : "${OJ_JUDGE0_URL:=http://127.0.0.1:2358}"
+  : "${OJ_TRUST_FORWARDED_FOR:=false}"
+  : "${OJ_METRICS_ALLOW_ANONYMOUS:=false}"
   : "${OJ_LEARN_ROOT:=$FRONTEND/learn_source}"
   : "${OJ_JWT_SECRET:=0123456789abcdef0123456789abcdef0123456789abcdef}"
+
+  # 生产环境第一道防线：禁止无沙箱的本机执行
+  if [ "$APP_ENV" = "production" ] && [ "$OJ_ALLOW_LOCAL_JUDGE" = "true" ]; then
+    die "生产环境禁止启用无沙箱的本机代码执行（OJ_ALLOW_LOCAL_JUDGE=true）"
+  fi
 
   # OAuth：兼容旧版 .env 的 IOSCLUB_* / GITHUB_* 命名
   if [ -z "${OJ_OAUTH_IOSCLUB_CLIENT_SECRET:-}" ] && [ -n "${IOSCLUB_CLIENT_SECRET:-}" ]; then
@@ -162,9 +178,10 @@ load_config() {
   [ -n "${OJ_OAUTH_GITHUB_CLIENT_ID:-}" ] && providers+=("github")
   [ ${#providers[@]} -gt 0 ] && OJ_OAUTH_PROVIDERS="${OJ_OAUTH_PROVIDERS:-$(IFS=,; echo "${providers[*]}")}"
 
-  export OJ_DB_URL OJ_DB_USERNAME OJ_DB_PASSWORD OJ_REDIS_HOST OJ_REDIS_PORT OJ_REDIS_PASSWORD \
+  export APP_ENV OJ_DB_URL OJ_DB_USERNAME OJ_DB_PASSWORD OJ_REDIS_HOST OJ_REDIS_PORT OJ_REDIS_PASSWORD \
          OJ_API_PORT OJ_FRONTEND_URL OJ_COOKIE_SECURE OJ_ALLOW_LOCAL_JUDGE OJ_JUDGE_ENABLED \
-         OJ_JUDGE_EXECUTOR OJ_LEARN_ROOT OJ_JWT_SECRET OJ_OAUTH_PROVIDERS
+         OJ_JUDGE_EXECUTOR OJ_JUDGE0_ENABLED OJ_JUDGE0_URL OJ_TRUST_FORWARDED_FOR \
+         OJ_METRICS_ALLOW_ANONYMOUS OJ_LEARN_ROOT OJ_JWT_SECRET OJ_OAUTH_PROVIDERS
   export OJ_OAUTH_IOSCLUB_CLIENT_ID OJ_OAUTH_IOSCLUB_CLIENT_SECRET OJ_OAUTH_IOSCLUB_ISSUER \
          OJ_OAUTH_IOSCLUB_SCOPE OJ_OAUTH_IOSCLUB_REDIRECT_URI
   export OJ_OAUTH_GITHUB_CLIENT_ID OJ_OAUTH_GITHUB_CLIENT_SECRET OJ_OAUTH_GITHUB_AUTHORIZATION_URI \
@@ -290,6 +307,11 @@ up() {
   start_pg; start_redis; build_jars; start_api; seed_default_user; start_worker; start_frontend
   echo
   echo "前端 http://127.0.0.1:${WEB_PORT}    API http://127.0.0.1:${OJ_API_PORT}"
+  if [ "$OJ_ALLOW_LOCAL_JUDGE" = "true" ]; then
+    echo "判题：本机无隔离执行（仅限本地开发，APP_ENV=$APP_ENV）"
+  else
+    echo "判题：Judge0（$OJ_JUDGE0_URL）；如需本地无沙箱判题请显式设置 OJ_ALLOW_LOCAL_JUDGE=true"
+  fi
   echo "本地登录账号：smoke / SmokePass123!（在登录表单用「账号+密码」登录）"
   if [ -n "${OJ_OAUTH_IOSCLUB_CLIENT_ID:-}" ] || [ -n "${OJ_OAUTH_GITHUB_CLIENT_ID:-}" ]; then
     echo "提示：OAuth 回调默认指向 127.0.0.1，若未在提供方白名单登记，本地点击第三方登录会报「无效的回调地址」。"

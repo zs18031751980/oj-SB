@@ -85,14 +85,16 @@ public class WebConfig implements WebMvcConfigurer {
         return registration;
     }
 
-    /** 注册指标端点认证过滤器（order=4，仅 /actuator/prometheus）。 */
+    /** 注册指标端点认证过滤器（order=4），统一保护 /metrics 与 actuator 指标端点。 */
     @Bean
     FilterRegistrationBean<MetricsAuthFilter> metricsAuthFilter(@Value("${oj.metrics.token:}")
-    String token) {
+    String token,
+            @Value("${oj.metrics.allow-anonymous:false}")
+            boolean allowAnonymous) {
         FilterRegistrationBean<MetricsAuthFilter> registration = new FilterRegistrationBean<>(
-                new MetricsAuthFilter(token));
+                new MetricsAuthFilter(token, allowAnonymous));
         registration.setOrder(4);
-        registration.addUrlPatterns("/actuator/prometheus");
+        registration.addUrlPatterns("/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/*", "/metrics");
         return registration;
     }
 

@@ -29,7 +29,11 @@ public class LearnScannerService {
     private volatile long cacheTs;
 
     public LearnScannerService() {
-        String configured = System.getenv("OJ_LEARN_ROOT");
+        this(System.getenv("OJ_LEARN_ROOT"));
+    }
+
+    /** 供测试注入根目录；null/空时退回 ./learn。 */
+    LearnScannerService(String configured) {
         this.root = Paths.get(configured == null || configured.isBlank() ? "./learn" : configured).toAbsolutePath()
                 .normalize();
     }

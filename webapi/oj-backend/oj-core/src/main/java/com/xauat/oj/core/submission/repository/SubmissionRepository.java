@@ -20,6 +20,16 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
     List<Submission> findByUser_IdOrderByIdDesc(Integer userId);
 
     /**
+     * 数据库分页查询某用户的提交历史（推荐用于列表接口，避免全量加载）。
+     *
+     * @param userId   用户 ID
+     * @param pageable 分页与排序参数
+     * @return 当前页数据及总数
+     */
+    org.springframework.data.domain.Page<Submission> findByUser_Id(Integer userId,
+            org.springframework.data.domain.Pageable pageable);
+
+    /**
      * 根据评测任务 ID（{@code jobId}）查询提交。
      *
      * @param jobId 评测任务 ID

@@ -40,6 +40,13 @@ public class OAuthController {
     private final AuthSessionService sessionService;
     private final ProviderUserSync providerUserSync;
     private final boolean pkceEnabled;
+    private final AccountRateLimiter rateLimiter;
+    private final boolean passwordGrantEnabled;
+    /** 与外部供应商通信的 HTTP 客户端：设置连接超时，避免外部异常时长期占用线程。 */
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    /** 单次外部请求的整体超时。 */
+    private static final Duration EXTERNAL_TIMEOUT = Duration.ofSeconds(10);
+
     /** 注入 Redis、用户/Grant 仓库、JWT、供应商注册表、会话服务与用户同步器，并读取前端地址与 PKCE 开关。 */
     public OAuthController(StringRedisTemplate redis, UserRepository users, OAuthGrantRepository grants, JwtService jwt,
             ObjectMapper mapper,
@@ -47,7 +54,10 @@ public class OAuthController {
             String frontend,
             OAuthProviderRegistry providers, AuthSessionService sessionService, ProviderUserSync providerUserSync,
             @Value("${oj.oauth.pkce:false}")
-            boolean pkceEnabled) {
+            boolean pkceEnabled,
+            AccountRateLimiter rateLimiter,
+            @Value("${oj.oauth.password-grant-enabled:true}")
+            boolean passwordGrantEnabled) {
         this.redis = redis;
         this.users = users;
         this.grants = grants;
@@ -58,6 +68,8 @@ public class OAuthController {
         this.sessionService = sessionService;
         this.providerUserSync = providerUserSync;
         this.pkceEnabled = pkceEnabled;
+        this.rateLimiter = rateLimiter;
+        this.passwordGrantEnabled = passwordGrantEnabled;
     }
 
     /**
@@ -185,6 +197,14 @@ public class OAuthController {
         String tokenUri = providers.property(provider, "token-uri");
         if (tokenUri == null)
             return ResponseEntity.status(503).body(Map.of("error", "OAuth provider 未配置"));
+        if (!passwordGrantEnabled)
+            return ResponseEntity.status(503).body(Map.of("error", "第三方密码登录已禁用，请使用授权码登录"));
+        if (request.identifier() == null || request.identifier().isBlank()
+                || request.password() == null || request.password().isBlank())
+            return ResponseEntity.badRequest().body(Map.of("error", "账号和密码不能为空"));
+        // 与本地密码登录同级的账号维度限流，避免第三方密码模式被用于暴力破解
+        if (!rateLimiter.allow(request.identifier()))
+            return ResponseEntity.status(429).body(Map.of("error", "登录尝试过于频繁"));
         try {
             // 以表单方式向供应商 token 端点提交密码模式请求，所有值均做 URL 编码
             String form = "grant_type=password&username=" + OAuthProviderRegistry.enc(request.identifier())
@@ -192,18 +212,20 @@ public class OAuthController {
                     + OAuthProviderRegistry.enc(providers.property(provider, "client-id")) + "&client_secret="
                     + OAuthProviderRegistry.enc(providers.property(provider, "client-secret"));
             HttpRequest tokenRequest = HttpRequest.newBuilder(URI.create(tokenUri))
+                    .timeout(EXTERNAL_TIMEOUT)
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(form)).build();
             JsonNode token = mapper.readTree(
-                    HttpClient.newHttpClient().send(tokenRequest, HttpResponse.BodyHandlers.ofString()).body());
+                    http.send(tokenRequest, HttpResponse.BodyHandlers.ofString()).body());
             String access = token.path("access_token").asText();
             if (access.isBlank())
                 return ResponseEntity.status(401).body(Map.of("error", "提供商认证失败"));
             // 再以 access_token 拉取用户信息，后续流程与授权码回调一致
             HttpRequest infoRequest = HttpRequest.newBuilder(URI.create(providers.property(provider, "userinfo-uri")))
+                    .timeout(EXTERNAL_TIMEOUT)
                     .header("Authorization", "Bearer " + access).GET().build();
             JsonNode profile = mapper.readTree(
-                    HttpClient.newHttpClient().send(infoRequest, HttpResponse.BodyHandlers.ofString()).body());
+                    http.send(infoRequest, HttpResponse.BodyHandlers.ofString()).body());
             String providerId = profile.path("sub").asText(profile.path("id").asText());
             String email = profile.path("email").asText("");
             String username = profile.path("preferred_username").asText(profile.path("login").asText(email));
@@ -250,14 +272,15 @@ public class OAuthController {
                 + "&redirect_uri=" + OAuthProviderRegistry.enc(providers.property(provider, "redirect-uri"))
                 + (codeVerifier == null ? "" : "&code_verifier=" + OAuthProviderRegistry.enc(codeVerifier));
         HttpRequest req = HttpRequest.newBuilder(URI.create(tokenUri))
+                .timeout(EXTERNAL_TIMEOUT)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form)).build();
-        JsonNode token = mapper
-                .readTree(HttpClient.newHttpClient().send(req, HttpResponse.BodyHandlers.ofString()).body());
+        JsonNode token = mapper.readTree(http.send(req, HttpResponse.BodyHandlers.ofString()).body());
         String access = token.path("access_token").asText();
         HttpRequest info = HttpRequest.newBuilder(URI.create(providers.property(provider, "userinfo-uri")))
+                .timeout(EXTERNAL_TIMEOUT)
                 .header("Authorization", "Bearer " + access).GET().build();
-        return mapper.readTree(HttpClient.newHttpClient().send(info, HttpResponse.BodyHandlers.ofString()).body());
+        return mapper.readTree(http.send(info, HttpResponse.BodyHandlers.ofString()).body());
     }
 
     /** URL 安全、无填充的 Base64 编码（用于 PKCE 值）。 */

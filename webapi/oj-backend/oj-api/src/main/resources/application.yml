@@ -27,10 +27,16 @@ server:
   port: ${OJ_API_PORT:6173}
   forward-headers-strategy: framework
 oj:
+  environment: ${APP_ENV:development}
   cors:
     origins: ${OJ_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173}
+  proxy:
+    # 仅当部署在会覆盖 X-Forwarded-For 的可信反向代理之后才可开启
+    trust-forwarded-for: ${OJ_TRUST_FORWARDED_FOR:false}
   metrics:
     token: ${METRICS_TOKEN:}
+    # 未配置令牌时是否允许匿名访问监控端点；生产必须为 false
+    allow-anonymous: ${OJ_METRICS_ALLOW_ANONYMOUS:false}
   readiness:
     require-worker: ${OJ_REQUIRE_WORKER:false}
     worker-fresh-seconds: ${OJ_WORKER_FRESH_SECONDS:45}
@@ -40,6 +46,8 @@ oj:
     login-account-per-minute: ${OJ_RATE_LIMIT_LOGIN_ACCOUNT_PER_MINUTE:20}
   oauth:
     pkce: ${OJ_OAUTH_PKCE:false}
+    # 第三方 OAuth2 密码模式兼容开关；如无必要建议关闭，仅使用授权码流程
+    password-grant-enabled: ${OJ_OAUTH_PASSWORD_GRANT_ENABLED:true}
   mfa:
     require: ${JURY_REQUIRE_MFA:false}
     totp-secrets: ${JURY_TOTP_SECRETS:}

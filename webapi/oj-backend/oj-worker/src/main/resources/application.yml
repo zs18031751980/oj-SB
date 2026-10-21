@@ -13,6 +13,7 @@ spring:
       port: ${OJ_REDIS_PORT:6379}
       password: ${OJ_REDIS_PASSWORD:}
 oj:
+  environment: ${APP_ENV:development}
   auth:
     jwt-secret: ${OJ_JWT_SECRET:change-this-secret-in-production-change-this-secret-in-production}
   judge:
