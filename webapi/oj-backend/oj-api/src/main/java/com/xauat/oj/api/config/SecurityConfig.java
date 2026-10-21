@@ -66,7 +66,9 @@ public class SecurityConfig {
                                 "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/metrics",
                                 "/actuator/metrics/**", "/actuator/prometheus", "/metrics",
                                 // OpenAPI/Swagger 文档（对齐旧后端 /swagger/ 公开可读）
-                                "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
+                                "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",
+                                // 上传文件（头像等）公开可读，与旧后端 /uploads/<file> 行为一致
+                                "/uploads/**")
                         .permitAll()
                         // 仅匿名可读的展示类 GET 接口
                         .requestMatchers(HttpMethod.GET, "/announcement", "/announcement/**", "/contests",
