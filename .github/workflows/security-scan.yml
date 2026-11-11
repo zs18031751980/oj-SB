@@ -1,0 +1,37 @@
+name: security-scan
+
+# 手工或每周一次的基线安全扫描。目标地址由输入或仓库变量 ZAP_TARGET 提供。
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "被扫描地址，例如 https://test.example.com"
+        required: false
+  schedule:
+    - cron: "0 3 * * 1"
+
+jobs:
+  zap-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve target
+        id: target
+        shell: bash
+        run: |
+          TARGET="${{ github.event.inputs.target || vars.ZAP_TARGET }}"
+          if [ -z "$TARGET" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Skip notice
+        if: steps.target.outputs.skip == 'true'
+        run: echo "未配置目标（workflow 输入或仓库变量 ZAP_TARGET），跳过 ZAP 扫描"
+      - name: ZAP baseline
+        if: steps.target.outputs.skip != 'true'
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ steps.target.outputs.target }}
+          allow_issue_writing: false

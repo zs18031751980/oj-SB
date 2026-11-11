@@ -41,5 +41,8 @@ public class WorkerSecurityValidator {
             throw new IllegalStateException("配置不一致：OJ_JUDGE_EXECUTOR=local 但未开启 OJ_ALLOW_LOCAL_JUDGE");
         if ("production".equalsIgnoreCase(environment) && "local".equalsIgnoreCase(executor))
             throw new IllegalStateException("生产环境禁止 Worker 使用 local 执行器");
+        // 沙箱运行时要求以非 root 身份启动子进程（execution_runtime 会拒绝 root 执行用户）
+        if ("sandbox".equalsIgnoreCase(executor) && "root".equals(System.getProperty("user.name")))
+            throw new IllegalStateException("sandbox 执行器要求 Worker 以非 root 用户运行");
     }
 }

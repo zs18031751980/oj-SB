@@ -1,0 +1,38 @@
+name: perf
+
+# 手工触发的压力测试流水线，不阻塞日常 PR。需提供可访问的非生产环境地址。
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "目标地址，例如 https://test.example.com"
+        required: true
+      script:
+        description: "k6 脚本"
+        type: choice
+        default: problems.js
+        options:
+          - problems.js
+          - login.js
+          - submit.js
+      vus:
+        description: "虚拟用户数"
+        default: "20"
+      duration:
+        description: "持续时间"
+        default: "30s"
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: Run k6
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          VUS: ${{ inputs.vus }}
+          DURATION: ${{ inputs.duration }}
+          SMOKE_USER: ${{ secrets.SMOKE_USER }}
+          SMOKE_PASS: ${{ secrets.SMOKE_PASS }}
+        run: k6 run "perf/k6/${{ inputs.script }}"

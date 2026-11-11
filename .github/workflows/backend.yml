@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - "webapi/oj-backend/**"
+      - "perf/**"
       - ".github/workflows/backend.yml"
   pull_request:
     paths:
       - "webapi/oj-backend/**"
+      - "perf/**"
       - ".github/workflows/backend.yml"
 
 jobs:
@@ -23,7 +25,48 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
-      - name: Build and test
-        run: mvn -B -DskipTests=false test
-      - name: Package
-        run: mvn -B -DskipTests package
+      - name: Ensure Docker is available (Testcontainers)
+        run: docker info
+      - name: Build, test and package
+        run: mvn -B verify
+      - name: Ensure integration tests actually ran
+        shell: bash
+        run: |
+          set -euo pipefail
+          found=0
+          while IFS= read -r report; do
+            case "$report" in
+              *RedisJudgeQueueIT.txt|*RepositorySchemaTest.txt)
+                found=1
+                if grep -Eq 'Tests run: 0|Skipped: [1-9]' "$report"; then
+                  echo "集成测试被跳过，说明 Docker/Testcontainers 未生效: $report"
+                  cat "$report"
+                  exit 1
+                fi
+                ;;
+            esac
+          done < <(find . -path '*/target/surefire-reports/*.txt')
+          if [ "$found" -eq 0 ]; then
+            echo "未找到集成测试报告（RedisJudgeQueueIT / RepositorySchemaTest）"
+            exit 1
+          fi
+          echo "集成测试已执行"
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4

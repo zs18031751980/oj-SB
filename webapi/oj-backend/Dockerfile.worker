@@ -14,9 +14,15 @@ RUN mvn -B -q -DskipTests -pl oj-worker -am package
 
 FROM eclipse-temurin:25-jre
 RUN apt-get update && apt-get install -y --no-install-recommends docker.io ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 oj \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin oj
 ARG SERVICE=oj-worker
 ENV SERVICE=${SERVICE} JAVA_OPTS=""
 WORKDIR /app
 COPY --from=build /src/oj-worker/target/oj-worker-0.1.0-SNAPSHOT.jar /app/oj-worker.jar
+# 非 root 运行：sandbox 执行器的 execution_runtime 会拒绝 root 身份执行用户代码。
+# 若使用 sandbox 执行器，需通过 group_add 授予 docker.sock 所在组的访问权限。
+RUN chown -R oj:oj /app
+USER 10001:10001
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/${SERVICE}.jar"]

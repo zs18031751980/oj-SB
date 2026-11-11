@@ -187,6 +187,7 @@ OJ_ALLOW_LOCAL_JUDGE=true OJ_JUDGE_EXECUTOR=local ./start.sh up
 10. **比赛题面可见性**：比赛详情与题面接口共用同一套判断；草稿/就绪/已取消对普通用户不可见，私有比赛仅参赛者或管理/裁判可读；公开已发布比赛允许匿名读取。
 11. **OIDC 角色信任**：`OJ_OAUTH_TRUSTED_ROLE_PROVIDERS` 为空时新用户一律 `member`；可信供应商默认最多授予 `staff`，`manager` 需显式 `OJ_OAUTH_ALLOW_MANAGER_FROM_PROVIDER=true` 或本地授权。
 12. **账号生命周期**：停用账号立即撤销全部会话；重新启用不恢复旧会话。刷新 Cookie 使用 `HttpOnly + SameSite=Lax`，生产强制 `OJ_COOKIE_SECURE=true`。
+13. **沙箱执行**：`oj.judge.executor=sandbox` 要求 Worker 以**非 root** 运行（`Dockerfile.worker` 默认 UID 10001，`execution_runtime` 会拒绝 root 执行用户）；需通过 docker 组访问 `docker.sock`。`deploy/sandbox-check.sh` 可在具备 Docker 的 CI 校验 `network=none`、只读根、`cap-drop=ALL`、`no-new-privileges` 与资源限制。
 
 ### 数据库与迁移
 
@@ -195,16 +196,24 @@ Flyway 在 API 启动时自动执行 `oj-api/src/main/resources/db/migration` �
 ## 测试
 
 ```bash
-# 后端单元/集成测试（Testcontainers 在无 Docker 时自动跳过）
+# 后端单元/集成测试
 cd webapi/oj-backend
 JAVA_HOME=~/.jdk/jdk-25.0.2 mvn test
 
 # 前端 E2E（Playwright，需先启动本地栈）
 cd webapp/letapp
 CI=1 npx playwright test
+
+# 沙箱隔离自检（需 Docker）
+./webapi/oj-backend/deploy/sandbox-check.sh
 ```
 
-安全相关测试覆盖：公告可见性、监控鉴权、可信代理 IP、学习资源路径穿越、本机执行开关、启动密钥校验。
+- **Testcontainers**：`RepositorySchemaTest`（PostgreSQL）与 `RedisJudgeQueueIT`（真实 Redis 多消费者抢占/租约恢复）在没有 Docker 时自动跳过。CI 通过 `docker info` 与报告检查确保它们**实际执行**，避免“跳过却全绿”。
+- **判题可靠性**：Worker ACK/REJECT、超重试进死信、过期任务恢复；Outbox 在 Redis 故障时保留 PENDING 并重试；`publishOnce` 去重。
+- **安全回归**：会话撤销/过期、IDOR 越权、公告/比赛可见性、监控鉴权、可信代理 IP、路径穿越、生产配置自检。
+- **竞赛计分**：ACM 罚时、OI 最高分、重复提交与封榜/解封快照选择。
+- **压力测试**：`perf/k6/` 提供 login/problems/submit 脚本，通过 `perf` 工作流手工触发，不阻塞日常 PR。
+- **安全扫描**：`.github/workflows/security-scan.yml` 定期/手工执行 ZAP Baseline；`backend.yml` 包含 gitleaks 与依赖审查。
 
 ## 许可证
 

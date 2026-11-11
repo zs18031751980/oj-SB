@@ -152,24 +152,27 @@ public class ContestScoreboardService {
                                 || s.getSubmittedAt().isBefore(contest.getFreezeTime())))
                 .toList();
         // 以 entry（队长）聚合，先为所有参赛者建立空行，保证零提交者也上榜
-        Map<Integer, LinkedHashMap<String, ProblemScore>> perUser = new HashMap<>();
+        Map<Integer, LinkedHashMap<String, ContestScoring.ProblemScore>> perUser = new HashMap<>();
         participants.findAll().stream().filter(p -> contest.getId().equals(p.getContestId()))
                 .forEach(p -> perUser.putIfAbsent(entryResolver.entryUser(contest.getId(), p.getUserId()),
                         new LinkedHashMap<>()));
         for (var submission : source) {
             Integer entry = entryResolver.entryUser(contest.getId(), submission.getUserId());
             var byProblem = perUser.computeIfAbsent(entry, ignored -> new LinkedHashMap<>());
-            byProblem.computeIfAbsent(submission.getProblemIndex(), ProblemScore::new)
-                    .accept(submission, contest.getStartTime(), "ACM".equalsIgnoreCase(contest.getContestType()),
-                            contest.getPenaltyTime());
+            byProblem.computeIfAbsent(submission.getProblemIndex(), ContestScoring.ProblemScore::new)
+                    .accept(submission.getVerdict(), submission.getStatus(), submission.getPassed(),
+                            submission.getTotal(), submission.getScore(),
+                            ContestScoring.minutesBetween(contest.getStartTime(), submission.getSubmittedAt()),
+                            "ACM".equalsIgnoreCase(contest.getContestType()), contest.getPenaltyTime());
         }
         var rows = perUser.entrySet().stream().map(entry -> {
-            int solved = entry.getValue().values().stream().mapToInt(ProblemScore::solved).sum();
+            int solved = entry.getValue().values().stream().mapToInt(ContestScoring.ProblemScore::solvedCount).sum();
             int score = "OI".equalsIgnoreCase(contest.getContestType())
-                    ? entry.getValue().values().stream().mapToInt(ProblemScore::oiScore).sum()
+                    ? entry.getValue().values().stream().mapToInt(ContestScoring.ProblemScore::oiScore).sum()
                     : solved;
-            int penalty = entry.getValue().values().stream().mapToInt(ProblemScore::penalty).sum();
-            List<Map<String, Object>> problems = entry.getValue().values().stream().map(ProblemScore::asMap).toList();
+            int penalty = entry.getValue().values().stream().mapToInt(ContestScoring.ProblemScore::penalty).sum();
+            List<Map<String, Object>> problems = entry.getValue().values().stream()
+                    .map(ContestScoring.ProblemScore::asMap).toList();
             return new Row(entry.getKey(), score, solved, penalty, problems);
         }).sorted(Comparator.comparingInt(Row::score).reversed().thenComparingInt(Row::penalty)
                 .thenComparingInt(Row::userId)).toList();
@@ -190,68 +193,6 @@ public class ContestScoreboardService {
                     row.problems()));
         }
         return result;
-    }
-
-    private static final class ProblemScore {
-        private final String index;
-        private boolean solved;
-        private int submissions;
-        private int penalty;
-        private int best;
-        private int passed;
-        private int total;
-        private String status;
-        private Integer solveMinutes;
-        ProblemScore(String index) {
-            this.index = index;
-        }
-        void accept(ContestSubmission s, LocalDateTime start, boolean acm, int penaltyMinutes) {
-            submissions++;
-            // 通过用例数与总分取历史最大，避免部分结果回退覆盖已有成绩
-            int pass = s.getTotal() == 0 ? 0 : Math.max(0, s.getPassed());
-            int tot = Math.max(0, s.getTotal());
-            passed = Math.max(passed, pass);
-            total = Math.max(total, tot);
-            status = (s.getVerdict() == null || s.getVerdict().isBlank()) ? s.getStatus() : s.getVerdict();
-            int percent = tot == 0 ? 0 : (s.getScore() > 0 ? s.getScore() : pass * 100 / tot);
-            // 已 AC 后不再改变该题成绩
-            if (solved)
-                return;
-            if ("AC".equalsIgnoreCase(s.getVerdict()) || "Accepted".equalsIgnoreCase(s.getVerdict())
-                    || "AC".equalsIgnoreCase(s.getStatus())) {
-                solved = true;
-                // ACM 罚时 = 首次 AC 用时 + 此前错误提交次数 × 罚时系数；OI 不计罚时
-                int minutes = start == null || s.getSubmittedAt() == null
-                        ? 0
-                        : (int) java.time.Duration.between(start, s.getSubmittedAt()).toMinutes();
-                solveMinutes = minutes;
-                penalty = acm ? minutes + (submissions - 1) * penaltyMinutes : 0;
-                best = Math.max(best, percent);
-            } else {
-                best = Math.max(best, percent);
-            }
-        }
-        int solved() {
-            return solved ? 1 : 0;
-        }
-        int penalty() {
-            return penalty;
-        }
-        int oiScore() {
-            return best;
-        }
-        Map<String, Object> asMap() {
-            var m = new HashMap<String, Object>();
-            m.put("problem_index", index);
-            m.put("solved", solved);
-            m.put("passed", passed);
-            m.put("total", total);
-            m.put("score", best);
-            m.put("status", status == null ? "" : status);
-            m.put("submissions", submissions);
-            m.put("solve_minutes", solveMinutes);
-            return m;
-        }
     }
 
     private record Row(Integer userId, int score, int solved, int penalty, List<Map<String, Object>> problems) {
