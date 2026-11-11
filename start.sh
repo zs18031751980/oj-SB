@@ -139,6 +139,7 @@ load_config() {
     OJ_JUDGE0_ENABLED="${OJ_JUDGE0_ENABLED:-true}"
   fi
   : "${OJ_JUDGE0_URL:=http://127.0.0.1:2358}"
+  : "${OJ_WORKER_POOL:=all}"
   : "${OJ_TRUST_FORWARDED_FOR:=false}"
   : "${OJ_TRUSTED_PROXIES:=}"
   : "${OJ_METRICS_ALLOW_ANONYMOUS:=false}"
@@ -188,7 +189,7 @@ load_config() {
 
   export APP_ENV OJ_DB_URL OJ_DB_USERNAME OJ_DB_PASSWORD OJ_REDIS_HOST OJ_REDIS_PORT OJ_REDIS_PASSWORD \
          OJ_API_PORT OJ_FRONTEND_URL OJ_COOKIE_SECURE OJ_ALLOW_LOCAL_JUDGE OJ_JUDGE_ENABLED \
-         OJ_JUDGE_EXECUTOR OJ_JUDGE0_ENABLED OJ_JUDGE0_URL OJ_TRUST_FORWARDED_FOR OJ_TRUSTED_PROXIES \
+         OJ_JUDGE_EXECUTOR OJ_JUDGE0_ENABLED OJ_JUDGE0_URL OJ_WORKER_POOL OJ_TRUST_FORWARDED_FOR OJ_TRUSTED_PROXIES \
          OJ_METRICS_ALLOW_ANONYMOUS OJ_RATE_LIMIT_PUBLIC_FAIL_CLOSED OJ_OAUTH_PASSWORD_GRANT_ENABLED \
          OJ_BIND_ADDRESS OJ_LEARN_ROOT OJ_JWT_SECRET OJ_OAUTH_PROVIDERS
   export OJ_OAUTH_IOSCLUB_CLIENT_ID OJ_OAUTH_IOSCLUB_CLIENT_SECRET OJ_OAUTH_IOSCLUB_ISSUER \
@@ -287,12 +288,29 @@ seed_default_user() {
   fi
 }
 
+wait_judge_ready() {
+  # 等待首个 Worker 心跳，避免刚启动时 /healthz/judge 短暂返回 503
+  local pool
+  case "${OJ_WORKER_POOL}" in
+    contest|practice|rejudge|validation) pool="$OJ_WORKER_POOL" ;;
+    *) pool="contest" ;;
+  esac
+  for _ in $(seq 1 60); do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${OJ_API_PORT}/healthz/judge?pool=$pool" 2>/dev/null || true)" = "200" ] \
+      && { echo "[worker] 心跳就绪（pool=$pool）"; return 0; }
+    sleep 1
+  done
+  echo "[worker] 心跳就绪检查超时（见 /healthz/judge?pool=$pool）" >&2
+  return 0
+}
+
 start_worker() {
   if [ -f "$RUNTIME/worker.pid" ] && kill -0 "$(cat "$RUNTIME/worker.pid")" 2>/dev/null; then echo "[worker] 已在运行"; return; fi
-  OJ_WORKER_POOL="${OJ_WORKER_POOL:-all}" \
   setsid java -jar "$BACKEND/oj-worker/target/oj-worker-0.1.0-SNAPSHOT.jar" > "$LOGS/worker.log" 2>&1 < /dev/null &
   echo $! > "$RUNTIME/worker.pid"
-  sleep 4; echo "[worker] 启动（本机执行）"
+  sleep 1
+  wait_judge_ready
+  echo "[worker] 启动（本机执行）"
 }
 
 start_frontend() {
